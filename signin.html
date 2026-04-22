@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <title>tyes — Sign In</title>
+  <meta content="width=device-width, initial-scale=1" name="viewport">
+  <link href="css/normalize.css" rel="stylesheet" type="text/css">
+  <link
+    href="https://fonts.googleapis.com/css2?family=League+Spartan:wght@700;800&family=Montserrat:wght@400;500;600&display=swap"
+    rel="stylesheet">
+  <link href="images/tyes-logo-new.svg" rel="shortcut icon" type="image/x-icon">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Montserrat', sans-serif;
+      background: #050505;
+      color: #fff;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .auth-container {
+      width: 100%;
+      max-width: 420px;
+      padding: 2rem;
+    }
+
+    .auth-logo {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      margin-bottom: 3rem;
+      text-decoration: none;
+    }
+
+    .auth-logo img {
+      height: 36px;
+    }
+
+    .auth-logo span {
+      font-family: 'Gliker', serif;
+      font-size: 1.5rem;
+      color: #fff;
+    }
+
+    .auth-title {
+      font-family: 'League Spartan', sans-serif;
+      font-size: 2rem;
+      font-weight: 700;
+      text-align: center;
+      margin-bottom: 0.5rem;
+    }
+
+    .auth-subtitle {
+      font-family: 'Montserrat', sans-serif;
+      font-size: 0.9rem;
+      font-weight: 500;
+      color: rgba(255, 255, 255, 0.5);
+      text-align: center;
+      margin-bottom: 2.5rem;
+    }
+
+    .auth-tabs {
+      display: flex;
+      gap: 0;
+      margin-bottom: 2rem;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .auth-tab {
+      flex: 1;
+      padding: 0.75rem;
+      text-align: center;
+      font-family: 'Montserrat', sans-serif;
+      font-size: 0.85rem;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      cursor: pointer;
+      background: transparent;
+      border: none;
+      color: rgba(255, 255, 255, 0.4);
+      transition: all 0.3s;
+    }
+
+    .auth-tab.active {
+      background: #58b2ad;
+      color: #fff;
+    }
+
+    .auth-input {
+      width: 100%;
+      padding: 0.85rem 1rem;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 6px;
+      color: #fff;
+      font-family: 'Montserrat', sans-serif;
+      font-size: 0.9rem;
+      font-weight: 500;
+      margin-bottom: 1rem;
+      outline: none;
+      transition: border-color 0.3s;
+    }
+
+    .auth-input::placeholder {
+      color: rgba(255, 255, 255, 0.3);
+    }
+
+    .auth-input:focus {
+      border-color: #58b2ad;
+    }
+
+    .auth-btn {
+      width: 100%;
+      padding: 0.9rem;
+      background: #58b2ad;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      font-family: 'Montserrat', sans-serif;
+      font-size: 0.9rem;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      cursor: pointer;
+      transition: opacity 0.3s;
+      margin-top: 0.5rem;
+    }
+
+    .auth-btn:hover {
+      opacity: 0.85;
+    }
+
+    .auth-divider {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      margin: 1.5rem 0;
+      color: rgba(255, 255, 255, 0.3);
+      font-size: 0.8rem;
+      font-weight: 500;
+    }
+
+    .auth-divider::before,
+    .auth-divider::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    .auth-link {
+      color: #58b2ad;
+      text-decoration: none;
+      font-size: 0.85rem;
+      font-weight: 500;
+    }
+
+    .auth-link:hover {
+      text-decoration: underline;
+    }
+
+    .auth-footer {
+      text-align: center;
+      margin-top: 2rem;
+      font-size: 0.8rem;
+      color: rgba(255, 255, 255, 0.35);
+    }
+
+    .auth-form {
+      display: none;
+    }
+
+    .auth-form.active {
+      display: block;
+    }
+
+    .auth-name-row {
+      display: flex;
+      gap: 0.75rem;
+    }
+
+    .auth-name-row .auth-input {
+      flex: 1;
+    }
+
+    @font-face {
+      font-family: Gliker;
+      src: url('fonts/gliker-regular.ttf') format("truetype");
+      font-weight: 400;
+      font-style: normal;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="auth-container">
+    <a href="index.html" class="auth-logo"><img src="images/tyes-logo-new.svg" alt="tyes"><span>tyes</span></a>
+    <h1 class="auth-title">Welcome back</h1>
+    <p class="auth-subtitle">Sign in to your account or create a new one</p>
+    <div class="auth-tabs">
+      <button class="auth-tab active" onclick="switchTab('signin')">Sign In</button>
+      <button class="auth-tab" onclick="switchTab('signup')">Sign Up</button>
+    </div>
+    <div id="signin-form" class="auth-form active">
+      <input type="email" class="auth-input" placeholder="Email address">
+      <input type="password" class="auth-input" placeholder="Password">
+      <div style="text-align:right;margin-top:-0.5rem;margin-bottom:0.5rem;"><a href="#" class="auth-link"
+          onclick="switchTab('forgot');return false;" style="font-size:0.8rem;">Forgot password?</a></div>
+      <button class="auth-btn" onclick="tyesLogin()">Sign In</button>
+      <div class="auth-divider">or</div>
+      <button class="auth-btn" style="background:transparent;border:1px solid rgba(255,255,255,0.15);"
+        onclick="tyesLogin()">Continue with Google</button>
+    </div>
+    <div id="signup-form" class="auth-form">
+      <div class="auth-name-row">
+        <input type="text" class="auth-input" placeholder="First name">
+        <input type="text" class="auth-input" placeholder="Last name">
+      </div>
+      <input type="email" class="auth-input" placeholder="Email address">
+      <input type="password" class="auth-input" placeholder="Password">
+      <input type="password" class="auth-input" placeholder="Confirm password">
+      <button class="auth-btn" onclick="tyesLogin()">Create Account</button>
+      <div class="auth-divider">or</div>
+      <button class="auth-btn" style="background:transparent;border:1px solid rgba(255,255,255,0.15);"
+        onclick="tyesLogin()">Continue with Google</button>
+    </div>
+    <div id="forgot-form" class="auth-form">
+      <p
+        style="font-family:'Montserrat',sans-serif;font-weight:500;font-size:0.85rem;color:rgba(255,255,255,0.5);margin-bottom:1.5rem;text-align:center;">
+        Enter your email and we'll send you a reset link.</p>
+      <input type="email" class="auth-input" placeholder="Email address">
+      <button class="auth-btn">Send Reset Link</button>
+      <div style="text-align:center;margin-top:1rem;"><a href="#" class="auth-link"
+          onclick="switchTab('signin');return false;" style="font-size:0.85rem;">← Back to Sign In</a></div>
+    </div>
+    <div class="auth-footer">
+      <a href="main.html" class="auth-link">← Back to home</a>
+    </div>
+  </div>
+  <script>
+    function switchTab(tab) {
+      document.querySelectorAll('.auth-tab').forEach(function (t, i) { t.classList.toggle('active', i === (tab === 'signin' ? 0 : 1)); });
+      document.getElementById('signin-form').classList.toggle('active', tab === 'signin');
+      document.getElementById('signup-form').classList.toggle('active', tab === 'signup');
+      document.getElementById('forgot-form').classList.toggle('active', tab === 'forgot');
+      if (tab === 'forgot') { document.querySelector('.auth-title').textContent = 'Reset password'; document.querySelector('.auth-subtitle').textContent = 'We\'ll help you get back in'; document.querySelector('.auth-tabs').style.display = 'none'; }
+      else { document.querySelector('.auth-tabs').style.display = 'flex'; document.querySelector('.auth-title').textContent = tab === 'signin' ? 'Welcome back' : 'Create account'; document.querySelector('.auth-subtitle').textContent = tab === 'signin' ? 'Sign in to your account or create a new one' : 'Get started with tyes today'; }
+    }
+  </script>
+
+  <script>
+    function tyesLogin() {
+      var email = document.querySelector('#signin-form input[type="email"]').value;
+      var pass = document.querySelector('#signin-form input[type="password"]').value;
+      if (email === "dashboardtest" && pass === "parola") {
+        sessionStorage.setItem("tyes_user", "1");
+        window.location.href = "https://tyes-website-gr41.vercel.app/app/dashboard";
+      } else if (email && pass) {
+        sessionStorage.setItem("tyes_user", "1");
+        window.location.href = "https://tyes-website-gr41.vercel.app/app/dashboard";
+      } else {
+        alert("Please enter your credentials");
+      }
+    }
+  </script>
+</body>
+
+</html>

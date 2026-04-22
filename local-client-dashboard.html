@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tyes — Client Dashboard (Local Preview)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script type="importmap">
+    {
+      "imports": {
+        "react": "https://esm.sh/react@18.2.0",
+        "react-dom": "https://esm.sh/react-dom@18.2.0",
+        "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+        "lucide-react": "https://esm.sh/lucide-react@0.263.1?deps=react@18.2.0",
+        "recharts": "https://esm.sh/recharts@2.10.1?deps=react@18.2.0"
+      }
+    }
+    </script>
+  <style>
+    body {
+      background-color: #0a0a0a;
+      color: #fff;
+      margin: 0;
+      font-family: 'Inter', sans-serif;
+    }
+
+    ::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: #111;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: #333;
+      border-radius: 10px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: #444;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel" data-type="module">
+    import React, { useState, useCallback, useEffect } from 'react';
+    import ReactDOM from 'react-dom/client';
+    import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+    import { Search, Bell, ChevronDown, ChevronRight, ChevronLeft, Download, MoreVertical, Plus, Eye, Check, X, Clock, RefreshCw, Upload, Image, Settings, LogOut, Home, Package, CreditCard, FileText, MessageSquare, User, Camera, Paperclip, Send, Star, ArrowUpRight, Menu, AlertCircle, Zap, ExternalLink, Trash2, Edit, Save } from 'lucide-react';
+
+    // ══════════════════════════════════════
+    // TOAST NOTIFICATION SYSTEM
+    // ══════════════════════════════════════
+    const useToast = () => {
+      const [toasts, setToasts] = useState([]);
+      const addToast = useCallback((message, type = "success") => {
+        const id = Date.now();
+        setToasts(t => [...t, { id, message, type }]);
+        setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), 3000);
+      }, []);
+      return { toasts, addToast };
+    };
+
+    const ToastContainer = ({ toasts }) => (
+      <div style={{ position: "fixed", top: 20, right: 20, zIndex: 9999, display: "flex", flexDirection: "column", gap: 8 }}>
+        {toasts.map(t => (
+          <div key={t.id} style={{ padding: "10px 18px", borderRadius: 10, background: t.type === "success" ? "#065f46" : t.type === "error" ? "#7f1d1d" : t.type === "warning" ? "#78350f" : "#1e3a5f", color: "#fff", fontSize: 13, fontWeight: 500, boxShadow: "0 8px 30px rgba(0,0,0,0.4)", animation: "slideIn 0.3s ease", border: `1px solid ${t.type === "success" ? "#34d399" : t.type === "error" ? "#f87171" : t.type === "warning" ? "#fbbf24" : "#60a5fa"}44` }}>
+            {t.message}
+          </div>
+        ))}
+      </div>
+    );
+
+    // ══════════════════════════════════════
+    // MODAL SYSTEM
+    // ══════════════════════════════════════
+    const Modal = ({ open, onClose, title, children, width }) => {
+      if (!open) return null;
+      return (
+        <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 9998, display: "flex", alignItems: "center", justifyContent: "center", backdropFilter: "blur(4px)" }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: "#111", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 16, padding: 28, width: width || 440, maxWidth: "90vw", maxHeight: "80vh", overflow: "auto" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+              <h3 style={{ fontSize: 16, fontWeight: 700, color: "#fff", margin: 0 }}>{title}</h3>
+              <button onClick={onClose} style={{ background: "rgba(255,255,255,0.05)", border: "none", borderRadius: 8, padding: 6, cursor: "pointer", color: "#6b7280" }}><X size={14} /></button>
+            </div>
+            {children}
+          </div>
+        </div>
+      );
+    };
+
+    // ══════════════════════════════════════
+    // HELPERS & COMPONENTS
+    // ══════════════════════════════════════
+    const statusConfig = {
+      pending: { label: "Pending", bg: "rgba(107,114,128,0.15)", color: "#9ca3af", icon: Clock },
+      in_progress: { label: "In Progress", bg: "rgba(59,130,246,0.15)", color: "#60a5fa", icon: Clock },
+      revision: { label: "Revision", bg: "rgba(251,191,36,0.15)", color: "#fbbf24", icon: RefreshCw },
+      approved: { label: "Approved", bg: "rgba(16,185,129,0.15)", color: "#34d399", icon: Check },
+      completed: { label: "Completed", bg: "rgba(16,185,129,0.15)", color: "#34d399", icon: Check },
+      delivered: { label: "Delivered", bg: "rgba(78,205,196,0.15)", color: "#4ecdc4", icon: Package },
+    };
+
+    const StatusBadge = ({ status }) => {
+      const c = statusConfig[status] || statusConfig.pending;
+      const Icon = c.icon;
+      return (
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 10px", borderRadius: 20, background: c.bg, color: c.color, fontSize: 11, fontWeight: 600 }}>
+          <Icon size={11} /> {c.label}
+        </span>
+      );
+    };
+
+    const StatCard = ({ icon: Icon, label, value, sub, accent, onClick }) => (
+      <div onClick={onClick} style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 16, padding: "20px 22px", flex: 1, minWidth: 180, cursor: onClick ? "pointer" : "default", transition: "all 0.2s" }} onMouseEnter={e => { if (onClick) e.currentTarget.style.borderColor = "rgba(78,205,196,0.2)"; }} onMouseLeave={e => { if (onClick) e.currentTarget.style.borderColor = "rgba(255,255,255,0.06)"; }}>
+        <div style={{ width: 36, height: 36, borderRadius: 10, background: "linear-gradient(135deg,#4ecdc4,#2ab7a9)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 12 }}>
+          <Icon size={16} color="#fff" />
+        </div>
+        <div style={{ fontSize: 26, fontWeight: 800, color: accent || "#fff", marginBottom: 2 }}>{value}</div>
+        <div style={{ fontSize: 12, color: "#6b7280" }}>{label}</div>
+        {sub && <div style={{ fontSize: 11, color: "#4b5563", marginTop: 4 }}>{sub}</div>}
+      </div>
+    );
+
+    const SidebarItem = ({ icon: Icon, label, active, onClick, collapsed, badge }) => (
+      <button onClick={onClick} style={{ display: "flex", alignItems: "center", gap: 10, padding: collapsed ? "10px 12px" : "10px 14px", borderRadius: 10, width: "100%", border: "none", cursor: "pointer", fontSize: 13, fontWeight: active ? 600 : 400, color: active ? "#fff" : "#6b7280", background: active ? "linear-gradient(135deg,rgba(78,205,196,0.25),rgba(42,183,169,0.15))" : "transparent", transition: "all 0.2s", justifyContent: collapsed ? "center" : "flex-start", position: "relative" }} onMouseEnter={(e) => { if (!active) e.target.style.background = "rgba(255,255,255,0.04)"; }} onMouseLeave={(e) => { if (!active) e.target.style.background = active ? "linear-gradient(135deg,rgba(78,205,196,0.25),rgba(42,183,169,0.15))" : "transparent"; }}>
+        <Icon size={17} style={{ flexShrink: 0 }} />
+        {!collapsed && <span style={{ flex: 1, textAlign: "left" }}>{label}</span>}
+        {!collapsed && badge && <span style={{ background: "#ef4444", color: "#fff", fontSize: 9, fontWeight: 700, padding: "1px 6px", borderRadius: 10 }}>{badge}</span>}
+      </button>
+    );
+
+    const InputField = ({ label, value, onChange, placeholder, type }) => (
+      <div style={{ marginBottom: 14 }}>
+        <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#d1d5db", marginBottom: 6 }}>{label}</label>
+        <input type={type || "text"} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} style={{ width: "100%", padding: "10px 14px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.03)", color: "#fff", fontSize: 13, outline: "none", boxSizing: "border-box" }} />
+      </div>
+    );
+
+    // ══════════════════════════════════════
+    // MAIN APP
+    // ══════════════════════════════════════
+    const navPages = [
+      { id: "overview", label: "Overview", icon: Home },
+      { id: "orders", label: "My Orders", icon: Package },
+      { id: "new-order", label: "New Order", icon: Plus },
+      { id: "messages", label: "Messages", icon: MessageSquare, badge: "1" },
+      { id: "invoices", label: "Invoices", icon: FileText },
+      { id: "account", label: "Account", icon: User },
+    ];
+
+    function TyesClient() {
+      const { toasts, addToast } = useToast();
+      const [page, setPage] = useState("overview");
+      const [collapsed, setCollapsed] = useState(false);
+      const [showNotifDrop, setShowNotifDrop] = useState(false);
+      const [showProfileDrop, setShowProfileDrop] = useState(false);
+      const [showLogoutModal, setShowLogoutModal] = useState(false);
+      const [showOrderDetailModal, setShowOrderDetailModal] = useState(null);
+      const [showRevisionModal, setShowRevisionModal] = useState(null);
+
+      // ── Client Info State ──
+      const [clientInfo, setClientInfo] = useState({
+        name: "Rayhan Inc.", email: "studio@Rayhan.com", tier: "pro", joined: "Dec 2025", totalOrders: 8, totalSpent: 640, imagesDelivered: 42, freeTestUsed: true,
+      });
+
+      // ── Orders State ──
+      const [orders, setOrders] = useState([
+        {
+          id: "ORD-3011", title: "Spring Skincare Campaign", plan: "Growth", images: 10, status: "revision", category: "Skincare", date: "2026-04-13", revenue: 80, revisions: 2, maxRevisions: 3, progress: 75, items: [
+            { name: "Milky Jelly Cleanser — Hero", status: "approved" },
+            { name: "Milky Jelly Cleanser — Lifestyle", status: "approved" },
+            { name: "Priming Moisturizer — Product Shot", status: "revision" },
+            { name: "Priming Moisturizer — Editorial", status: "revision" },
+            { name: "Super Pure Serum — Close Up", status: "in_progress" },
+            { name: "Super Pure Serum — Flatlay", status: "in_progress" },
+            { name: "Balm Dotcom — Hero", status: "pending" },
+            { name: "Balm Dotcom — Texture", status: "pending" },
+            { name: "Solution — Product Shot", status: "pending" },
+            { name: "Solution — Before/After", status: "pending" },
+          ]
+        },
+        {
+          id: "ORD-2988", title: "Cloud Paint Collection", plan: "Starter", images: 5, status: "delivered", category: "Makeup", date: "2026-03-28", revenue: 45, revisions: 1, maxRevisions: 3, progress: 100, items: [
+            { name: "Cloud Paint Dusk — Hero", status: "delivered" },
+            { name: "Cloud Paint Beam — Hero", status: "delivered" },
+            { name: "Cloud Paint Storm — Hero", status: "delivered" },
+            { name: "Cloud Paint Puff — Lifestyle", status: "delivered" },
+            { name: "Cloud Paint Range — Flatlay", status: "delivered" },
+          ]
+        },
+        { id: "ORD-2965", title: "Boy Brow Product Shots", plan: "Starter", images: 5, status: "delivered", category: "Makeup", date: "2026-03-15", revenue: 45, revisions: 0, maxRevisions: 3, progress: 100, items: [] },
+        { id: "ORD-2940", title: "Futuredew Editorial", plan: "Growth", images: 10, status: "delivered", category: "Skincare", date: "2026-03-01", revenue: 80, revisions: 1, maxRevisions: 3, progress: 100, items: [] },
+        { id: "ORD-2921", title: "Lash Slick Campaign", plan: "Starter", images: 5, status: "delivered", category: "Makeup", date: "2026-02-18", revenue: 45, revisions: 0, maxRevisions: 3, progress: 100, items: [] },
+        { id: "ORD-2900", title: "Skin Tint Launch", plan: "Growth", images: 10, status: "delivered", category: "Makeup", date: "2026-02-05", revenue: 80, revisions: 2, maxRevisions: 3, progress: 100, items: [] },
+        { id: "ORD-2880", title: "Rayhan You Perfume", plan: "Single", images: 1, status: "delivered", category: "Fragrance", date: "2026-01-20", revenue: 10, revisions: 0, maxRevisions: 3, progress: 100, items: [] },
+        { id: "ORD-2855", title: "Free Test — Milky Jelly", plan: "Free Test", images: 1, status: "delivered", category: "Skincare", date: "2025-12-18", revenue: 0, revisions: 0, maxRevisions: 3, progress: 100, items: [] },
+      ]);
+
+      // ── Messages State ──
+      const [messagesList, setMessagesList] = useState([
+        { id: 1, from: "team", name: "Tyes Team", text: "Hi! We've started working on ORD-3011. Two images need a small revision on the label area — could you confirm the font is Futura PT?", time: "2 hrs ago", read: true },
+        { id: 2, from: "client", name: "You", text: "Yes, it's Futura PT Bold for the headline and Futura PT Book for body text. File attached in the brief.", time: "1 hr ago", read: true },
+        { id: 3, from: "team", name: "Tyes Team", text: "Perfect, thank you! We'll have the revision ready within the hour.", time: "45 min ago", read: false },
+      ]);
+
+      // ── Invoices State ──
+      const [invoices, setInvoices] = useState([
+        { id: "INV-0087", order: "ORD-3011", amount: 80, status: "pending", date: "2026-04-13", due: "2026-04-27" },
+        { id: "INV-0074", order: "ORD-2988", amount: 45, status: "paid", date: "2026-03-28", due: "2026-04-11" },
+        { id: "INV-0068", order: "ORD-2965", amount: 45, status: "paid", date: "2026-03-15", due: "2026-03-29" },
+        { id: "INV-0055", order: "ORD-2940", amount: 80, status: "paid", date: "2026-03-01", due: "2026-03-15" },
+        { id: "INV-0044", order: "ORD-2921", amount: 45, status: "paid", date: "2026-02-18", due: "2026-03-04" },
+        { id: "INV-0033", order: "ORD-2900", amount: 80, status: "paid", date: "2026-02-05", due: "2026-02-19" },
+        { id: "INV-0021", order: "ORD-2880", amount: 10, status: "paid", date: "2026-01-20", due: "2026-02-03" },
+      ]);
+
+      // ── Notifications ──
+      const [notifications, setNotifications] = useState([
+        { id: 1, text: "Revision ready for ORD-3011", time: "10 min ago", read: false },
+        { id: 2, text: "Invoice INV-0087 generated", time: "2 hrs ago", read: false },
+        { id: 3, text: "ORD-2988 delivered", time: "1 day ago", read: true },
+      ]);
+
+      // ── Account Prefs State ──
+      const [prefs, setPrefs] = useState({ orderNotif: true, msgNotif: true, weeklyReport: false });
+      const [editingCompany, setEditingCompany] = useState(false);
+      const [companyName, setCompanyName] = useState("Rayhan Inc.");
+      const [companyEmail, setCompanyEmail] = useState("studio@Rayhan.com");
+
+      const spendingData = [
+        { month: "April", spent: 1 }, { month: "May", spent: 0 },
+        { month: "June", spent: 0 }, { month: "July", spent: 0 },
+      ];
+
+      const unreadNotifs = notifications.filter(n => !n.read).length;
+      const unreadMsgs = messagesList.filter(m => !m.read && m.from === "team").length;
+
+      const renderPage = () => {
+        switch (page) {
+          case "overview": return (
+            <div>
+              <div style={{ marginBottom: 28 }}>
+                <h1 style={{ fontSize: 24, fontWeight: 800, color: "#fff", margin: 0 }}>Welcome back, {companyName.split(" ")[0]}</h1>
+                <p style={{ fontSize: 13, color: "#6b7280" }}>Here's an overview of your account.</p>
+              </div>
+              <div style={{ display: "flex", gap: 16, marginBottom: 24, flexWrap: "wrap" }}>
+                <StatCard icon={Package} label="Total Orders" value={2} sub="Lifetime" onClick={() => setPage("orders")} />
+                <StatCard icon={Image} label="Images Delivered" value={0} sub="Across all orders" />
+                <StatCard icon={CreditCard} label="Total Spent" value="$0" accent="#34d399" sub="Lifetime" />
+                <StatCard icon={Star} label="Your Tier" value="Free" sub="5+ orders" />
+              </div>
+              <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 16, padding: 22 }}>
+                <h3 style={{ fontSize: 14, fontWeight: 700, color: "#fff", margin: "0 0 18px" }}>Spending Overview</h3>
+                <ResponsiveContainer width="100%" height={200}>
+                  <AreaChart data={spendingData}>
+                    <defs>
+                      <linearGradient id="sg" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#4ecdc4" stopOpacity={0.25} />
+                        <stop offset="100%" stopColor="#4ecdc4" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
+                    <XAxis dataKey="month" tick={{ fill: "#6b7280", fontSize: 11 }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fill: "#6b7280", fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={v => `$${v}`} />
+                    <Tooltip contentStyle={{ background: "#1a1a1a", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 10, fontSize: 12, color: "#fff" }} />
+                    <Area type="monotone" dataKey="spent" stroke="#4ecdc4" fill="url(#sg)" strokeWidth={2.5} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          );
+          case "orders": return (
+            <div>
+              <h1 style={{ fontSize: 24, fontWeight: 800, color: "#fff", margin: "0 0 24px" }}>My Orders</h1>
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                {orders.map(o => (
+                  <div key={o.id} style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 16, padding: 16, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <span style={{ fontSize: 11, color: "#4ecdc4", fontWeight: 700 }}>{o.id}</span>
+                        <StatusBadge status={o.status} />
+                      </div>
+                      <h3 style={{ fontSize: 15, fontWeight: 600, color: "#fff", margin: "4px 0" }}>{o.title}</h3>
+                      <span style={{ fontSize: 12, color: "#6b7280" }}>{o.plan} · {o.images} images · {o.date}</span>
+                    </div>
+                    <button style={{ background: "none", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, padding: "6px 12px", color: "#fff", fontSize: 12, cursor: "pointer" }}>Details</button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+          case "new-order": return (
+            <div style={{ textAlign: "center", padding: 40 }}>
+              <Plus size={48} color="#4ecdc4" style={{ margin: "0 auto 16px" }} />
+              <h2 style={{ fontSize: 20, fontWeight: 700 }}>Start a New Order</h2>
+              <p style={{ color: "#6b7280", maxWidth: 400, margin: "10px auto 20px" }}>Choose from our single shots or growth packs to get started.</p>
+              <button onClick={() => addToast("Redirecting to order flow...", "info")} style={{ background: "#4ecdc4", color: "#fff", border: "none", padding: "10px 24px", borderRadius: 10, fontWeight: 600 }}>Get Started</button>
+            </div>
+          );
+          case "messages": return (
+            <div>
+              <h1 style={{ fontSize: 24, fontWeight: 800, color: "#fff", margin: "0 0 20px" }}>Messages</h1>
+              <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 16, padding: 20 }}>
+                {messagesList.map(m => (
+                  <div key={m.id} style={{ marginBottom: 16, padding: 12, borderRadius: 12, border: "1px solid rgba(255,255,255,0.04)", background: m.from === "team" ? "rgba(255,255,255,0.02)" : "rgba(78,205,196,0.05)" }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: m.from === "team" ? "#4ecdc4" : "#fff", marginBottom: 4 }}>{m.name} <span style={{ fontWeight: 400, color: "#4b5563", marginLeft: 8 }}>{m.time}</span></div>
+                    <div style={{ fontSize: 13, color: "#d1d5db" }}>{m.text}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+          default: return <div>Under construction</div>;
+        }
+      };
+
+      return (
+        <div style={{ display: "flex", height: "100vh", overflow: "hidden" }}>
+          <ToastContainer toasts={toasts} />
+
+          {/* Sidebar */}
+          <div style={{ width: collapsed ? 64 : 220, borderRight: "1px solid rgba(255,255,255,0.06)", padding: 16, display: "flex", flexDirection: "column", transition: "width 0.2s" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 32 }}>
+              <div style={{ width: 32, height: 32, borderRadius: 10, background: "#4ecdc4", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 900 }}>T</div>
+              {!collapsed && <span style={{ fontWeight: 800, fontSize: 18 }}>Tyes</span>}
+            </div>
+            <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 4 }}>
+              {navPages.map(p => (
+                <SidebarItem key={p.id} icon={p.icon} label={p.label} active={page === p.id} onClick={() => setPage(p.id)} collapsed={collapsed} />
+              ))}
+            </div>
+            <SidebarItem icon={LogOut} label="Log Out" onClick={() => setShowLogoutModal(true)} collapsed={collapsed} />
+          </div>
+
+          {/* Main Content */}
+          <div style={{ flex: 1, padding: 40, overflowY: "auto" }}>
+            {renderPage()}
+          </div>
+
+          {/* Logout Modal */}
+          <Modal open={showLogoutModal} onClose={() => setShowLogoutModal(false)} title="Log Out">
+            <p style={{ color: "#9ca3af", marginBottom: 20 }}>Are you sure you want to log out?</p>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+              <button onClick={() => setShowLogoutModal(false)} style={{ color: "#9ca3af" }}>Cancel</button>
+              <button onClick={() => { setShowLogoutModal(false); addToast("Logged out"); }} style={{ background: "#ef4444", padding: "6px 16px", borderRadius: 8 }}>Log Out</button>
+            </div>
+          </Modal>
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<TyesClient />);
+  </script>
+</body>
+
+</html>
