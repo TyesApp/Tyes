@@ -1,9 +1,8 @@
 "use client";
-import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
 export default function Home() {
-  const router = useRouter();
-  useEffect(() => { router.replace("/auth"); }, [router]);
+  useEffect(() => { window.location.replace("/index.html"); }, []);
   return null;
 }
+

@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
+import { supabase } from "@/lib/supabase";
 
 type Tab = "signin" | "signup" | "forgot";
 
@@ -18,27 +19,59 @@ export default function AuthPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const handleSignIn = () => {
+  const handleSignIn = async () => {
     setError("");
     if (!email || !password) { setError("Please enter your credentials"); return; }
     setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
-      // Demo: admin goes to admin, everyone else to client dashboard
-      if (email.toLowerCase().includes("admin")) {
-        router.push("/dashboard/admin");
-      } else {
+    
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (error) throw error;
+
+      if (data.user) {
+        // Redirect to client dashboard on success
         router.push("/dashboard/client");
       }
-    }, 800);
+    } catch (err: any) {
+      setError(err.message || "An error occurred during sign in");
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleSignUp = () => {
+  const handleSignUp = async () => {
     setError("");
     if (!firstName || !email || !password) { setError("Please fill in all required fields"); return; }
     if (password !== confirmPassword) { setError("Passwords do not match"); return; }
     setLoading(true);
-    setTimeout(() => { setLoading(false); router.push("/dashboard/client"); }, 800);
+
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            first_name: firstName,
+            last_name: lastName,
+          }
+        }
+      });
+
+      if (error) throw error;
+
+      if (data.user) {
+        alert("Registration successful! Please check your email for confirmation (if enabled) or sign in.");
+        setTab("signin");
+      }
+    } catch (err: any) {
+      setError(err.message || "An error occurred during sign up");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleReset = () => {
@@ -149,13 +182,9 @@ export default function AuthPage() {
 
         {/* Footer */}
         <div style={{ textAlign: "center", marginTop: "2rem", fontSize: "0.8rem", color: "rgba(255,255,255,0.35)" }}>
-          <a href="/" className="auth-link">← Back to home</a>
+          <a href="/main.html" className="auth-link">← Back to home</a>
         </div>
 
-        {/* Demo hint */}
-        <div style={{ marginTop: "1.5rem", padding: "10px 14px", borderRadius: 8, background: "rgba(78,205,196,0.08)", border: "1px solid rgba(78,205,196,0.15)", fontSize: 11, color: "rgba(78,205,196,0.7)", textAlign: "center" }}>
-          Demo: use <strong>admin@tyes.io</strong> → Admin dashboard · any other email → Client dashboard
-        </div>
       </div>
     </div>
   );
