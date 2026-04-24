@@ -65,7 +65,9 @@ export default function AuthPage() {
 
   if (!mounted) return null;
 
-  const handleSignIn = async () => {
+  const handleSignIn = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    console.log("Attempting Sign In...", email, password);
     setError("");
     if (!email || !password) { addToast("Please enter your credentials", "error"); return; }
     setLoading(true);
@@ -79,9 +81,20 @@ export default function AuthPage() {
       if (error) throw error;
 
       if (data.user) {
+        // Fetch real role from profiles table
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', data.user.id)
+          .single();
+
+        const role = profile?.role || data.user.user_metadata?.role || "client";
+        console.log("Verified Role:", role);
+
         addToast("Signed in successfully!", "success");
-        const role = data.user.user_metadata?.role || "client";
-        router.push(role === "admin" ? "/dashboard/admin" : "/dashboard/client");
+        const isAdmin = ["admin", "superAdmin"].includes(role);
+        console.log("Is Admin:", isAdmin);
+        router.push(isAdmin ? "/dashboard/admin" : "/dashboard/client");
       }
     } catch (err: any) {
       addToast(err.message || "An error occurred", "error");
@@ -90,7 +103,9 @@ export default function AuthPage() {
     }
   };
 
-  const handleSignUp = async () => {
+  const handleSignUp = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    console.log("Attempting Sign Up...");
     setError("");
     if (!firstName || !email || !password) { addToast("Please fill in all required fields", "error"); return; }
     if (password !== confirmPassword) { addToast("Passwords do not match", "error"); return; }
@@ -104,17 +119,31 @@ export default function AuthPage() {
           data: {
             first_name: firstName,
             last_name: lastName,
-            role: "client",
-          }
-        }
+            role: "client", // New users start as clients by default
+          },
+        },
       });
 
-      if (error) throw error;
+      if (error) {
+        if (error.message.includes("already registered")) {
+          addToast("This email is already registered. Please sign in instead.", "warning");
+          setTab("signin");
+          return;
+        }
+        throw error;
+      }
 
       if (data.user) {
-        addToast("Account created successfully!", "success");
-        const role = data.user.user_metadata?.role || "client";
-        router.push(role === "admin" ? "/dashboard/admin" : "/dashboard/client");
+        // If there is no session, it means email confirmation is required
+        if (!data.session) {
+          addToast("Registration successful! Please check your email to confirm your account.", "success");
+          setTab("signin");
+        } else {
+          addToast("Account created successfully!", "success");
+          const role = data.user.user_metadata?.role || "client";
+          const isAdmin = ["admin", "superAdmin"].includes(role);
+          router.push(isAdmin ? "/dashboard/admin" : "/dashboard/client");
+        }
       }
     } catch (err: any) {
       addToast(err.message || "An error occurred", "error");
@@ -124,7 +153,8 @@ export default function AuthPage() {
   };
 
 
-  const handleReset = () => {
+  const handleReset = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     if (!resetEmail) { addToast("Please enter your email", "error"); return; }
     addToast("Reset link sent to your email!", "success");
     setTab("signin");
@@ -178,50 +208,50 @@ export default function AuthPage() {
 
         {/* Sign In Form */}
         {tab === "signin" && (
-          <div>
-            <input className="auth-input" type="email" placeholder="Email address" value={email} onChange={e => setEmail(e.target.value)} onKeyDown={e => e.key === "Enter" && handleSignIn()} />
-            <input className="auth-input" type="password" placeholder="Password" value={password} onChange={e => setPassword(e.target.value)} onKeyDown={e => e.key === "Enter" && handleSignIn()} />
+          <form onSubmit={handleSignIn}>
+            <input className="auth-input" type="email" placeholder="Email address" value={email} onChange={e => setEmail(e.target.value)} />
+            <input className="auth-input" type="password" placeholder="Password" value={password} onChange={e => setPassword(e.target.value)} />
             <div style={{ textAlign: "right", marginTop: "-0.5rem", marginBottom: "0.5rem" }}>
-              <button className="auth-link" style={{ background: "none", border: "none", cursor: "pointer", fontSize: "0.8rem" }} onClick={() => setTab("forgot")}>Forgot password?</button>
+              <button type="button" className="auth-link" style={{ background: "none", border: "none", cursor: "pointer", fontSize: "0.8rem" }} onClick={() => setTab("forgot")}>Forgot password?</button>
             </div>
-            <button className="auth-btn" disabled={loading} onClick={handleSignIn}>{loading ? "Signing in…" : "Sign In"}</button>
+            <button type="submit" className="auth-btn" disabled={loading}>{loading ? "Signing in…" : "Sign In"}</button>
             <div style={{ display: "flex", alignItems: "center", gap: "1rem", margin: "1.5rem 0", color: "rgba(255,255,255,0.3)", fontSize: "0.8rem", fontWeight: 500 }}>
               <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.1)" }} /> or <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.1)" }} />
             </div>
-            <button className="auth-btn-outline" onClick={() => addToast("Google sign-in coming soon", "warning")}>Continue with Google</button>
-          </div>
+            <button type="button" className="auth-btn-outline" onClick={() => addToast("Google sign-in coming soon", "warning")}>Continue with Google</button>
+          </form>
         )}
 
         {/* Sign Up Form */}
         {tab === "signup" && (
-          <div>
+          <form onSubmit={handleSignUp}>
             <div style={{ display: "flex", gap: "0.75rem" }}>
-              <input className="auth-input" type="text" placeholder="First name" value={firstName} onChange={e => setFirstName(e.target.value)} style={{ flex: 1 }} />
+              <input className="auth-input" type="text" placeholder="First name" value={firstName} onChange={e => setFirstName(e.target.value)} style={{ flex: 1 }} required />
               <input className="auth-input" type="text" placeholder="Last name" value={lastName} onChange={e => setLastName(e.target.value)} style={{ flex: 1 }} />
             </div>
-            <input className="auth-input" type="email" placeholder="Email address" value={email} onChange={e => setEmail(e.target.value)} />
-            <input className="auth-input" type="password" placeholder="Password" value={password} onChange={e => setPassword(e.target.value)} />
-            <input className="auth-input" type="password" placeholder="Confirm password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} />
-            <button className="auth-btn" disabled={loading} onClick={handleSignUp}>{loading ? "Creating account…" : "Create Account"}</button>
+            <input className="auth-input" type="email" placeholder="Email address" value={email} onChange={e => setEmail(e.target.value)} required />
+            <input className="auth-input" type="password" placeholder="Password" value={password} onChange={e => setPassword(e.target.value)} required />
+            <input className="auth-input" type="password" placeholder="Confirm password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} required />
+            <button type="submit" className="auth-btn" disabled={loading}>{loading ? "Creating account…" : "Create Account"}</button>
             <div style={{ display: "flex", alignItems: "center", gap: "1rem", margin: "1.5rem 0", color: "rgba(255,255,255,0.3)", fontSize: "0.8rem", fontWeight: 500 }}>
               <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.1)" }} /> or <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.1)" }} />
             </div>
-            <button className="auth-btn-outline" onClick={() => addToast("Google sign-in coming soon", "warning")}>Continue with Google</button>
-          </div>
+            <button type="button" className="auth-btn-outline" onClick={() => addToast("Google sign-in coming soon", "warning")}>Continue with Google</button>
+          </form>
         )}
 
         {/* Forgot Password Form */}
         {tab === "forgot" && (
-          <div>
+          <form onSubmit={handleReset}>
             <p style={{ fontFamily: "Montserrat, sans-serif", fontWeight: 500, fontSize: "0.85rem", color: "rgba(255,255,255,0.5)", marginBottom: "1.5rem", textAlign: "center" }}>
               Enter your email and we'll send you a reset link.
             </p>
-            <input className="auth-input" type="email" placeholder="Email address" value={resetEmail} onChange={e => setResetEmail(e.target.value)} />
-            <button className="auth-btn" onClick={handleReset}>Send Reset Link</button>
+            <input className="auth-input" type="email" placeholder="Email address" value={resetEmail} onChange={e => setResetEmail(e.target.value)} required />
+            <button type="submit" className="auth-btn">Send Reset Link</button>
             <div style={{ textAlign: "center", marginTop: "1rem" }}>
-              <button className="auth-link" style={{ background: "none", border: "none", cursor: "pointer" }} onClick={() => setTab("signin")}>← Back to Sign In</button>
+              <button type="button" className="auth-link" style={{ background: "none", border: "none", cursor: "pointer" }} onClick={() => setTab("signin")}>← Back to Sign In</button>
             </div>
-          </div>
+          </form>
         )}
 
         {/* Footer */}

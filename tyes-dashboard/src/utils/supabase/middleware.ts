@@ -43,16 +43,17 @@ export async function updateSession(request: NextRequest) {
 
   if (user) {
     const role = user.user_metadata?.role || 'client'
-
+    const isAdmin = ["admin", "superAdmin"].includes(role)
+    
     // Prevent clients from accessing admin dashboard
-    if (role !== 'admin' && pathname.startsWith('/dashboard/admin')) {
+    if (!isAdmin && pathname.startsWith('/dashboard/admin')) {
       const url = request.nextUrl.clone()
       url.pathname = '/dashboard/client'
       return NextResponse.redirect(url)
     }
 
-    // Prevent admins from accessing client dashboard (optional, usually admins can see both but for this app maybe they have different UIs)
-    if (role === 'admin' && pathname.startsWith('/dashboard/client')) {
+    // Prevent admins from accessing client dashboard (optional)
+    if (isAdmin && pathname.startsWith('/dashboard/client')) {
       const url = request.nextUrl.clone()
       url.pathname = '/dashboard/admin'
       return NextResponse.redirect(url)
@@ -61,7 +62,7 @@ export async function updateSession(request: NextRequest) {
     // Redirect from auth page if already logged in
     if (pathname.startsWith('/auth')) {
       const url = request.nextUrl.clone()
-      url.pathname = role === 'admin' ? '/dashboard/admin' : '/dashboard/client'
+      url.pathname = isAdmin ? '/dashboard/admin' : '/dashboard/client'
       return NextResponse.redirect(url)
     }
   }

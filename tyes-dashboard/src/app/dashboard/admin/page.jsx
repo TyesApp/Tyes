@@ -348,7 +348,9 @@ const UsersPage = ({ users, setUsers, toast, supabase }) => {
   const [search, setSearch] = useState("");
   const [viewUser, setViewUser] = useState(null);
   const [menuOpen, setMenuOpen] = useState(null);
-  const filtered = users.filter(u => !search || u.name.toLowerCase().includes(search.toLowerCase()) || u.email.toLowerCase().includes(search.toLowerCase()));
+  // Only show users with the 'client' role on this page
+  const clients = users.filter(u => u.role === "client");
+  const filtered = clients.filter(u => !search || u.name.toLowerCase().includes(search.toLowerCase()) || u.email.toLowerCase().includes(search.toLowerCase()));
 
   const toggleStatus = async (id) => {
     const user = users.find(u => u.id === id);
@@ -399,10 +401,10 @@ const UsersPage = ({ users, setUsers, toast, supabase }) => {
   };
 
   const counts = {
-    total: users.length,
-    active: users.filter(u => u.status === "active").length,
-    enterprise: users.filter(u => u.tier === "enterprise").length,
-    revenue: users.reduce((a, u) => a + (u.spent || 0), 0)
+    total: clients.length,
+    active: clients.filter(u => u.status === "active").length,
+    enterprise: clients.filter(u => u.tier === "enterprise" || u.tier === "pro").length,
+    revenue: clients.reduce((a, u) => a + (u.spent || 0), 0)
   };
 
   return (
@@ -615,51 +617,141 @@ const AnalyticsPage = ({ users }) => (
   </div>
 );
 
-const SettingsPage = ({ toast, studioInfo, setStudioInfo, supabase, users }) => {
+const SettingsPage = ({ toast, studioInfo, setStudioInfo, supabase, users, setUsers, adminUser, setAdminUser }) => {
   const [openSection, setOpenSection] = useState("profile");
   const [form, setForm] = useState({
-    name: studioInfo?.name || "",
-    email: studioInfo?.email || "",
-    url: studioInfo?.url || "",
+    firstName: adminUser?.user_metadata?.first_name || "",
+    lastName: adminUser?.user_metadata?.last_name || "",
+    email: adminUser?.email || "",
     description: studioInfo?.description || ""
   });
 
   useEffect(() => {
-    if (studioInfo) {
+    if (adminUser) {
       setForm({
-        name: studioInfo.name || "",
-        email: studioInfo.email || "",
-        url: studioInfo.url || "",
-        description: studioInfo.description || ""
+        firstName: adminUser.user_metadata?.first_name || "",
+        lastName: adminUser.user_metadata?.last_name || "",
+        email: adminUser.email || "",
+        description: form.description 
       });
     }
-  }, [studioInfo]);
+  }, [adminUser]);
 
   const [notifOrders, setNotifOrders] = useState(true);
   const [notifRevisions, setNotifRevisions] = useState(true);
   const [notifPayments, setNotifPayments] = useState(true);
   const [slaTarget, setSlaTarget] = useState("2");
   const [webhookUrl, setWebhookUrl] = useState("");
+  const [saving, setSaving] = useState(false);
 
-  const saveStudioProfile = async () => {
+  const saveAdminProfile = async () => {
+    if (!adminUser) return;
+    setSaving(true);
+    try {
+      // 1. Update Database Profile Table
+      const { error: dbError } = await supabase
+        .from('profiles')
+        .update({
+          first_name: form.firstName,
+          last_name: form.lastName,
+        })
+        .eq('id', adminUser.id);
+
+      if (dbError) throw dbError;
+
+      // 2. Update Auth Metadata (so sidebar and other UI update immediately)
+      const { error: authError } = await supabase.auth.updateUser({
+        data: { 
+          first_name: form.firstName,
+          last_name: form.lastName 
+        }
+      });
+
+      if (authError) throw authError;
+      
+      // 3. Update parent state immediately for real-time sidebar update
+      if (setAdminUser) {
+        setAdminUser(prev => ({
+          ...prev,
+          user_metadata: {
+            ...prev.user_metadata,
+            first_name: form.firstName,
+            last_name: form.lastName
+          }
+        }));
+      }
+      
+      toast("Profile updated successfully!");
+    } catch (err) {
+      console.error("Error updating profile:", err);
+      toast(err.message || "Failed to update profile", "error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const deleteUser = async (id, name) => {
+    if (!confirm(`Are you sure you want to remove ${name} from the team?`)) return;
     try {
       const { error } = await supabase
-        .from('studio_settings')
-        .update({
-          name: form.name,
-          email: form.email,
-          url: form.url,
-          description: form.description
-        })
-        .eq('id', 1);
+        .from('profiles')
+        .delete()
+        .eq('id', id);
 
       if (error) throw error;
-
-      setStudioInfo({ ...studioInfo, ...form });
-      toast("Studio profile saved successfully");
+      
+      // Update local state
+      if (setUsers) {
+        setUsers(prev => prev.filter(u => u.id !== id));
+      }
+      toast(`${name} removed from team`);
     } catch (err) {
-      console.error("Error saving studio profile:", err);
-      toast("Failed to save profile", "error");
+      console.error("Error deleting user:", err);
+      toast("Failed to remove user", "error");
+    }
+  };
+
+  const [showAdd, setShowAdd] = useState(false);
+  const [addForm, setAddForm] = useState({ firstName: "", lastName: "", email: "", role: "admin" });
+
+  const handleAddAdmin = async () => {
+    if (!addForm.email) {
+      toast("Email Address is required", "warning");
+      return;
+    }
+    
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .update({ role: addForm.role })
+        .eq('email', addForm.email)
+        .select();
+
+      if (error) throw error;
+      
+      if (!data || data.length === 0) {
+        toast("User not found. They must register as a client first before you can promote them to the team.", "info", 5000);
+        return;
+      }
+
+      if (setUsers) {
+        const updatedUser = {
+          ...data[0],
+          name: `${data[0].first_name || ''} ${data[0].last_name || ''}`.trim() || data[0].email
+        };
+        setUsers(prev => {
+          const exists = prev.find(u => u.id === updatedUser.id);
+          if (exists) return prev.map(u => u.id === updatedUser.id ? updatedUser : u);
+          return [updatedUser, ...prev];
+        });
+      }
+
+      setShowAdd(false);
+      setAddForm({ firstName: "", lastName: "", email: "", role: "admin" });
+      toast(`User ${addForm.email} promoted to ${addForm.role}!`);
+    } catch (err) {
+      console.error("Error promoting admin:", err);
+      toast(err.message || "Database error: Could not update user role.", "error");
     }
   };
 
@@ -671,27 +763,67 @@ const SettingsPage = ({ toast, studioInfo, setStudioInfo, supabase, users }) => 
 
   const sections = [
     {
-      id: "profile", title: "Studio Profile", desc: "Brand name, logo, description, and contact info", icon: Home, content: (
+      id: "profile", title: "My Profile", desc: "Your personal information and account details", icon: User, content: (
         <div style={{ padding: "16px 0" }}>
-          <InputField label="Studio Name" value={form.name} onChange={v => setForm({ ...form, name: v })} />
-          <InputField label="Contact Email" value={form.email} onChange={v => setForm({ ...form, email: v })} />
-          <InputField label="Website URL" value={form.url} onChange={v => setForm({ ...form, url: v })} />
-          <button onClick={saveStudioProfile} style={{ padding: "8px 18px", borderRadius: 8, border: "none", background: "linear-gradient(135deg,#4ecdc4,#2ab7a9)", color: "#fff", fontSize: 12, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}><Save size={12} /> Save Changes</button>
+          <div style={{ display: "flex", gap: 12 }}>
+            <InputField label="First Name" value={form.firstName} onChange={v => setForm({ ...form, firstName: v })} />
+            <InputField label="Last Name" value={form.lastName} onChange={v => setForm({ ...form, lastName: v })} />
+          </div>
+          <div style={{ opacity: 0.7 }}>
+            <InputField label="Account Email (Read-only)" value={form.email} onChange={() => {}} disabled />
+          </div>
+          <button onClick={saveAdminProfile} disabled={saving} style={{ padding: "8px 18px", borderRadius: 8, border: "none", background: saving ? "#4b5563" : "linear-gradient(135deg,#4ecdc4,#2ab7a9)", color: "#fff", fontSize: 12, fontWeight: 600, cursor: saving ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: 4 }}>
+            {saving ? <RefreshCw size={12} className="animate-spin" /> : <Save size={12} />} 
+            {saving ? "Saving..." : "Save Changes"}
+          </button>
         </div>
       )
     },
     {
       id: "team", title: "Team Members", desc: "Administrators and staff", icon: Users, content: (
         <div style={{ padding: "16px 0" }}>
-          {users.filter(u => u.role === "admin").map((m, i) => (
-            <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
-              <div style={{ width: 32, height: 32, borderRadius: 8, background: "linear-gradient(135deg,#4ecdc4,#2ab7a9)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700, fontSize: 12 }}>{m.name.charAt(0)}</div>
-              <div style={{ flex: 1 }}><div style={{ fontSize: 13, color: "#e5e7eb", fontWeight: 500 }}>{m.name}</div><div style={{ fontSize: 11, color: "#4b5563" }}>{m.email}</div></div>
-              <span style={{ fontSize: 11, color: "#7dd8d0", background: "rgba(78,205,196,0.1)", padding: "2px 8px", borderRadius: 10 }}>{m.role}</span>
+          <Modal open={showAdd} onClose={() => setShowAdd(false)} title="Promote to Team" width={400}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <p style={{ fontSize: 13, color: "#6b7280", margin: "0 0 4px", lineHeight: "1.5" }}>
+                To add a team member, they must first join the website as a client. Enter their email below to grant them staff access.
+              </p>
+              <InputField label="Staff Email" value={addForm.email} onChange={v => setAddForm({ ...addForm, email: v })} placeholder="e.g. staff@example.com" />
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 6, fontWeight: 600, textTransform: "uppercase" }}>Assign Role</div>
+                <select 
+                  value={addForm.role} 
+                  onChange={e => setAddForm({ ...addForm, role: e.target.value })}
+                  style={{ width: "100%", padding: "10px 12px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.03)", color: "#fff", fontSize: 13, outline: "none" }}
+                >
+                  <option value="admin">Administrator</option>
+                  <option value="superAdmin">Super Admin</option>
+                </select>
+              </div>
+              <button onClick={handleAddAdmin} style={{ padding: "10px", borderRadius: 10, border: "none", background: "linear-gradient(135deg,#4ecdc4,#2ab7a9)", color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>Change User Role</button>
             </div>
-          ))}
-          {users.filter(u => u.role === "admin").length === 0 && <p style={{ fontSize: 12, color: "#4b5563" }}>No other admins found.</p>}
-          <button onClick={() => toast("Invite system coming soon", "info")} style={{ marginTop: 12, padding: "8px 16px", borderRadius: 8, border: "1px dashed rgba(255,255,255,0.12)", background: "transparent", color: "#9ca3af", fontSize: 12, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}><Plus size={12} /> Add Team Member</button>
+          </Modal>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            {users.filter(u => ["admin", "superAdmin"].includes(u.role)).map((m, i) => (
+              <div key={m.id || i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 0", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+                <div style={{ width: 32, height: 32, borderRadius: 8, background: "linear-gradient(135deg,#4ecdc4,#2ab7a9)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700, fontSize: 12 }}>{m.name?.charAt(0) || m.first_name?.charAt(0) || "A"}</div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, color: "#e5e7eb", fontWeight: 500 }}>{m.name || `${m.first_name || ''} ${m.last_name || ''}`}</div>
+                  <div style={{ fontSize: 11, color: "#4b5563" }}>{m.email}</div>
+                </div>
+                <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.02em", color: m.role === 'superAdmin' ? "#f472b6" : "#4ecdc4", background: m.role === 'superAdmin' ? "rgba(244,114,182,0.1)" : "rgba(78,205,196,0.1)", padding: "2px 8px", borderRadius: 6, textTransform: "uppercase" }}>{m.role}</span>
+                {m.email !== adminUser.email && (
+                  <button onClick={() => deleteUser(m.id, m.name || m.email)} style={{ background: "rgba(239,68,68,0.05)", border: "none", borderRadius: 6, padding: 6, color: "#ef4444", cursor: "pointer", opacity: 0.6, transition: "opacity 0.2s" }} title="Remove from team" onMouseEnter={e => e.currentTarget.style.opacity = 1} onMouseLeave={e => e.currentTarget.style.opacity = 0.6}>
+                    <Trash2 size={14} />
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+
+          <button onClick={() => setShowAdd(true)} style={{ marginTop: 16, width: "100%", padding: "10px", borderRadius: 10, border: "1px dashed rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.02)", color: "#9ca3af", fontSize: 12, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+            <Plus size={14} /> Add New Team Member
+          </button>
         </div>
       )
     },
@@ -740,8 +872,8 @@ const SettingsPage = ({ toast, studioInfo, setStudioInfo, supabase, users }) => 
           <button onClick={() => toast(webhookUrl ? "Webhook URL saved" : "Please enter a webhook URL", webhookUrl ? "success" : "warning")} style={{ padding: "8px 18px", borderRadius: 8, border: "none", background: "linear-gradient(135deg,#4ecdc4,#2ab7a9)", color: "#fff", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>Save</button>
         </div>
       )
-    },
-  ];
+    }
+  ].filter(s => s.id !== "team" || adminUser?.user_metadata?.role === "superAdmin");
 
   return (
     <div>
@@ -778,9 +910,9 @@ export default function TyesAdmin() {
   const { toasts, addToast } = useToast();
   const [page, setPage] = useState("dashboard");
   const [collapsed, setCollapsed] = useState(false);
-  const [orders, setOrders] = useState(initOrders);
-  const [users, setUsers] = useState(initUsers);
-  const [plans, setPlans] = useState(initPlans);
+  const [orders, setOrders] = useState([]);
+  const [users, setUsers] = useState([]);
+  const [plans, setPlans] = useState([]);
   const [notifOpen, setNotifOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -853,7 +985,46 @@ export default function TyesAdmin() {
 
   useEffect(() => {
     fetchDashboardData();
-  }, [supabase]);
+
+    // REAL-TIME SYNC: Listen for profile changes (Team members & Clients)
+    const channel = supabase
+      .channel('profiles-realtime')
+      .on('postgres_changes', { event: '*', table: 'profiles' }, (payload) => {
+        const { eventType, new: newRow, old: oldRow } = payload;
+        
+        setUsers(currentUsers => {
+          if (eventType === 'INSERT') {
+            const newUser = {
+              ...newRow,
+              name: `${newRow.first_name || ''} ${newRow.last_name || ''}`.trim() || newRow.email,
+              spent: newRow.total_spent || 0,
+              orders: newRow.orders_count || 0,
+              joined: new Date(newRow.created_at).toISOString().split('T')[0]
+            };
+            return [newUser, ...currentUsers];
+          }
+          
+          if (eventType === 'UPDATE') {
+            return currentUsers.map(u => u.id === newRow.id ? {
+              ...u,
+              ...newRow,
+              name: `${newRow.first_name || ''} ${newRow.last_name || ''}`.trim() || newRow.email
+            } : u);
+          }
+          
+          if (eventType === 'DELETE') {
+            return currentUsers.filter(u => u.id !== oldRow.id);
+          }
+          
+          return currentUsers;
+        });
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   const handleLogout = async () => {
     try {
@@ -865,7 +1036,12 @@ export default function TyesAdmin() {
   };
 
   const renderPage = () => {
-    if (loading && page === "dashboard") return <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "60vh" }}><RefreshCw className="animate-spin" size={32} color="#4ecdc4" /></div>;
+    if (loading) return (
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "60vh", gap: 16 }}>
+        <RefreshCw className="animate-spin" size={40} color="#4ecdc4" />
+        <div style={{ color: "#4ecdc4", fontSize: 14, fontWeight: 600, letterSpacing: "0.05em", animation: "pulse 2s infinite" }}>FETCHING LIVE DATA...</div>
+      </div>
+    );
 
     switch (page) {
       case "dashboard": return <DashboardPage toast={addToast} goTo={setPage} orders={orders} users={users} />;
@@ -873,7 +1049,7 @@ export default function TyesAdmin() {
       case "clients": return <UsersPage users={users} setUsers={setUsers} toast={addToast} supabase={supabase} />;
       case "analytics": return <AnalyticsPage users={users} />;
       case "pricing": return <PricingPage plans={plans} setPlans={setPlans} toast={addToast} supabase={supabase} />;
-      case "settings": return <SettingsPage toast={addToast} studioInfo={studioInfo} setStudioInfo={setStudioInfo} supabase={supabase} users={users} />;
+      case "settings": return <SettingsPage toast={addToast} studioInfo={studioInfo} setStudioInfo={setStudioInfo} supabase={supabase} users={users} adminUser={adminUser} setAdminUser={setAdminUser} />;
       default: return <DashboardPage toast={addToast} goTo={setPage} />;
     }
   };
@@ -883,6 +1059,7 @@ export default function TyesAdmin() {
       <ToastContainer toasts={toasts} />
       <style>{`
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        @keyframes pulse { 0% { opacity: 0.6; } 50% { opacity: 1; } 100% { opacity: 0.6; } }
         .animate-spin { animation: spin 1s linear infinite; }
       `}</style>
 
@@ -890,9 +1067,16 @@ export default function TyesAdmin() {
       <div style={{ width: collapsed ? 64 : 220, borderRight: "1px solid rgba(255,255,255,0.06)", display: "flex", flexDirection: "column", padding: collapsed ? "16px 8px" : "16px 12px", flexShrink: 0, transition: "width 0.2s", overflow: "hidden" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "4px 6px", marginBottom: 24 }}>
           <div style={{ width: 32, height: 32, borderRadius: 10, background: "linear-gradient(135deg,#4ecdc4,#2ab7a9)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 900, fontSize: 13, flexShrink: 0 }}>
-            {(studioInfo?.name?.charAt(0) || "T").toUpperCase()}
+            {(adminUser?.user_metadata?.first_name?.charAt(0) || adminUser?.email?.charAt(0) || "A").toUpperCase()}
           </div>
-          {!collapsed && <div style={{ flex: 1, overflow: "hidden" }}><div style={{ fontSize: 14, fontWeight: 800, color: "#fff", lineHeight: 1.1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{studioInfo?.name || (loading ? "Loading..." : "Tyes Studio")}</div><div style={{ fontSize: 9, color: "#4ecdc4", fontStyle: "italic", marginTop: 2 }}>Admin Dashboard</div></div>}
+          {!collapsed && (
+            <div style={{ flex: 1, overflow: "hidden" }}>
+              <div style={{ fontSize: 14, fontWeight: 800, color: "#fff", lineHeight: 1.1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                {`${adminUser?.user_metadata?.first_name || ''} ${adminUser?.user_metadata?.last_name || ''}`.trim() || adminUser?.email?.split('@')[0] || "Admin"}
+              </div>
+              <div style={{ fontSize: 9, color: "#4ecdc4", fontStyle: "italic", marginTop: 2 }}>{adminUser?.user_metadata?.role === 'superAdmin' ? 'Super Admin' : 'Administrator'}</div>
+            </div>
+          )}
           <button onClick={() => setCollapsed(!collapsed)} style={{ background: "none", border: "none", color: "#4b5563", cursor: "pointer", padding: 2, display: collapsed ? "none" : "block" }}><ChevronLeft size={14} /></button>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 2, flex: 1 }}>
