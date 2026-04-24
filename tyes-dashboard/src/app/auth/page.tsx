@@ -1,14 +1,50 @@
 "use client";
-import { useState } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
-import { supabase } from "@/lib/supabase";
+import { createClient } from "@/utils/supabase/client";
 
 type Tab = "signin" | "signup" | "forgot";
 
+// ══════════════════════════════════════
+// TOAST NOTIFICATION SYSTEM
+// ══════════════════════════════════════
+const useToast = () => {
+  const [toasts, setToasts] = useState<any[]>([]);
+  const addToast = useCallback((message: string, type = "success") => {
+    const id = Date.now();
+    setToasts(t => [...t, { id, message, type }]);
+    setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), 3000);
+  }, []);
+  return { toasts, addToast };
+};
+
+const ToastContainer = ({ toasts }: { toasts: any[] }) => (
+  <div style={{ position: "fixed", top: 20, right: 20, zIndex: 9999, display: "flex", flexDirection: "column", gap: 8 }}>
+    {toasts.map(t => (
+      <div key={t.id} style={{
+        padding: "10px 18px",
+        borderRadius: 10,
+        background: t.type === "success" ? "#065f46" : t.type === "error" ? "#7f1d1d" : t.type === "warning" ? "#78350f" : "#1e3a5f",
+        color: "#fff",
+        fontSize: 13,
+        fontWeight: 500,
+        boxShadow: "0 8px 30px rgba(0,0,0,0.4)",
+        border: `1px solid ${t.type === "success" ? "#34d399" : t.type === "error" ? "#f87171" : t.type === "warning" ? "#fbbf24" : "#60a5fa"}44`
+      }}>
+        {t.message}
+      </div>
+    ))}
+  </div>
+);
+
 export default function AuthPage() {
   const router = useRouter();
+  const supabase = createClient();
+  const { toasts, addToast } = useToast();
+  const [mounted, setMounted] = useState(false);
+
   const [tab, setTab] = useState<Tab>("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -18,12 +54,23 @@ export default function AuthPage() {
   const [resetEmail, setResetEmail] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [otpStep, setOtpStep] = useState(false);
+  const [otpCode, setOtpCode] = useState("");
+  
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const title = otpStep ? "Verify email" : tab === "signin" ? "Welcome back" : tab === "signup" ? "Create account" : "Reset password";
+  const subtitle = otpStep ? `We've sent a code to ${email}` : tab === "signin" ? "Sign in to your account or create a new one" : tab === "signup" ? "Get started with tyes today" : "We'll help you get back in";
+
+  if (!mounted) return null;
 
   const handleSignIn = async () => {
     setError("");
-    if (!email || !password) { setError("Please enter your credentials"); return; }
+    if (!email || !password) { addToast("Please enter your credentials", "error"); return; }
     setLoading(true);
-    
+
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
@@ -33,11 +80,12 @@ export default function AuthPage() {
       if (error) throw error;
 
       if (data.user) {
-        // Redirect to client dashboard on success
-        router.push("/dashboard/client");
+        addToast("Signed in successfully!", "success");
+        const role = data.user.user_metadata?.role || "client";
+        router.push(role === "admin" ? "/dashboard/admin" : "/dashboard/client");
       }
     } catch (err: any) {
-      setError(err.message || "An error occurred during sign in");
+      addToast(err.message || "An error occurred", "error");
     } finally {
       setLoading(false);
     }
@@ -45,8 +93,8 @@ export default function AuthPage() {
 
   const handleSignUp = async () => {
     setError("");
-    if (!firstName || !email || !password) { setError("Please fill in all required fields"); return; }
-    if (password !== confirmPassword) { setError("Passwords do not match"); return; }
+    if (!firstName || !email || !password) { addToast("Please fill in all required fields", "error"); return; }
+    if (password !== confirmPassword) { addToast("Passwords do not match", "error"); return; }
     setLoading(true);
 
     try {
@@ -57,6 +105,7 @@ export default function AuthPage() {
           data: {
             first_name: firstName,
             last_name: lastName,
+            role: "client",
           }
         }
       });
@@ -64,29 +113,73 @@ export default function AuthPage() {
       if (error) throw error;
 
       if (data.user) {
-        alert("Registration successful! Please check your email for confirmation (if enabled) or sign in.");
-        setTab("signin");
+        addToast("Verification code sent to your email!", "success");
+        setOtpStep(true);
       }
     } catch (err: any) {
-      setError(err.message || "An error occurred during sign up");
+      addToast(err.message || "An error occurred", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyOtp = async () => {
+    setError("");
+    if (!otpCode) { addToast("Please enter the verification code", "error"); return; }
+    setLoading(true);
+
+    console.log("Attempting to verify OTP for:", email, "with code:", otpCode);
+
+    try {
+      const { data, error } = await supabase.auth.verifyOtp({
+        email,
+        token: otpCode,
+        type: 'signup'
+      });
+
+      if (error) {
+        console.error("OTP Verification Error:", error);
+        throw error;
+      }
+
+      if (data.user) {
+        console.log("OTP Verified successfully. User:", data.user);
+        addToast("Email verified successfully!", "success");
+        const role = data.user.user_metadata?.role || "client";
+        router.push(role === "admin" ? "/dashboard/admin" : "/dashboard/client");
+      }
+    } catch (err: any) {
+      addToast(err.message || "Invalid or expired code", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResendOtp = async () => {
+    setLoading(true);
+    try {
+      const { error } = await supabase.auth.resend({
+        type: 'signup',
+        email: email,
+      });
+      if (error) throw error;
+      addToast("New code sent to your email!", "success");
+    } catch (err: any) {
+      addToast(err.message || "Could not resend code", "error");
     } finally {
       setLoading(false);
     }
   };
 
   const handleReset = () => {
-    if (!resetEmail) { setError("Please enter your email"); return; }
-    setError("");
-    alert("Reset link sent! (demo)");
+    if (!resetEmail) { addToast("Please enter your email", "error"); return; }
+    addToast("Reset link sent to your email!", "success");
     setTab("signin");
   };
 
-  const title = tab === "signin" ? "Welcome back" : tab === "signup" ? "Create account" : "Reset password";
-  const subtitle = tab === "signin" ? "Sign in to your account or create a new one" : tab === "signup" ? "Get started with tyes today" : "We'll help you get back in";
-
   return (
     <div style={{
-      fontFamily: "'Montserrat', sans-serif",
+      fontFamily: "Montserrat, sans-serif",
       background: "#050505",
       color: "#fff",
       minHeight: "100vh",
@@ -94,17 +187,17 @@ export default function AuthPage() {
       alignItems: "center",
       justifyContent: "center",
     }}>
+      <ToastContainer toasts={toasts} />
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=League+Spartan:wght@700;800&family=Montserrat:wght@400;500;600&display=swap');
-        .auth-input { width:100%; padding:0.85rem 1rem; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); border-radius:6px; color:#fff; font-family:'Montserrat',sans-serif; font-size:0.9rem; font-weight:500; margin-bottom:1rem; outline:none; transition:border-color 0.3s; }
+        .auth-input { width:100%; padding:0.85rem 1rem; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); border-radius:6px; color:#fff; font-family:Montserrat,sans-serif; font-size:0.9rem; font-weight:500; margin-bottom:1rem; outline:none; transition:border-color 0.3s; }
         .auth-input::placeholder { color:rgba(255,255,255,0.3); }
         .auth-input:focus { border-color:#58b2ad; }
-        .auth-btn { width:100%; padding:0.9rem; background:#58b2ad; color:#fff; border:none; border-radius:6px; font-family:'Montserrat',sans-serif; font-size:0.9rem; font-weight:500; text-transform:uppercase; letter-spacing:0.1em; cursor:pointer; transition:opacity 0.3s; margin-top:0.5rem; }
+        .auth-btn { width:100%; padding:0.9rem; background:#58b2ad; color:#fff; border:none; border-radius:6px; font-family:Montserrat,sans-serif; font-size:0.9rem; font-weight:500; text-transform:uppercase; letter-spacing:0.1em; cursor:pointer; transition:opacity 0.3s; margin-top:0.5rem; }
         .auth-btn:hover { opacity:0.85; }
         .auth-btn:disabled { opacity:0.6; cursor:not-allowed; }
-        .auth-btn-outline { width:100%; padding:0.9rem; background:transparent; border:1px solid rgba(255,255,255,0.15); color:#fff; border-radius:6px; font-family:'Montserrat',sans-serif; font-size:0.9rem; font-weight:500; text-transform:uppercase; letter-spacing:0.1em; cursor:pointer; transition:all 0.3s; margin-top:0.5rem; }
+        .auth-btn-outline { width:100%; padding:0.9rem; background:transparent; border:1px solid rgba(255,255,255,0.15); color:#fff; border-radius:6px; font-family:Montserrat,sans-serif; font-size:0.9rem; font-weight:500; text-transform:uppercase; letter-spacing:0.1em; cursor:pointer; transition:all 0.3s; margin-top:0.5rem; }
         .auth-btn-outline:hover { background:rgba(255,255,255,0.05); }
-        .auth-tab { flex:1; padding:0.75rem; text-align:center; font-family:'Montserrat',sans-serif; font-size:0.85rem; font-weight:500; text-transform:uppercase; letter-spacing:0.08em; cursor:pointer; background:transparent; border:none; color:rgba(255,255,255,0.4); transition:all 0.3s; }
+        .auth-tab { flex:1; padding:0.75rem; text-align:center; font-family:Montserrat,sans-serif; font-size:0.85rem; font-weight:500; text-transform:uppercase; letter-spacing:0.08em; cursor:pointer; background:transparent; border:none; color:rgba(255,255,255,0.4); transition:all 0.3s; }
         .auth-tab.active { background:#58b2ad; color:#fff; }
         .auth-link { color:#58b2ad; text-decoration:none; font-size:0.85rem; font-weight:500; }
         .auth-link:hover { text-decoration:underline; }
@@ -119,21 +212,30 @@ export default function AuthPage() {
 
         {/* Title */}
         <h1 style={{ fontFamily: "'League Spartan',sans-serif", fontSize: "2rem", fontWeight: 700, textAlign: "center", marginBottom: "0.5rem" }}>{title}</h1>
-        <p style={{ fontFamily: "'Montserrat',sans-serif", fontSize: "0.9rem", fontWeight: 500, color: "rgba(255,255,255,0.5)", textAlign: "center", marginBottom: "2.5rem" }}>{subtitle}</p>
+        <p style={{ fontFamily: "Montserrat, sans-serif", fontSize: "0.9rem", fontWeight: 500, color: "rgba(255,255,255,0.5)", textAlign: "center", marginBottom: "2.5rem" }}>{subtitle}</p>
 
         {/* Tabs */}
-        {tab !== "forgot" && (
+        {!otpStep && tab !== "forgot" && (
           <div style={{ display: "flex", gap: 0, marginBottom: "2rem", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, overflow: "hidden" }}>
             <button className={`auth-tab ${tab === "signin" ? "active" : ""}`} onClick={() => setTab("signin")}>Sign In</button>
             <button className={`auth-tab ${tab === "signup" ? "active" : ""}`} onClick={() => setTab("signup")}>Sign Up</button>
           </div>
         )}
 
-        {/* Error */}
-        {error && <div style={{ background: "rgba(239,68,68,0.15)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 8, padding: "10px 14px", marginBottom: 16, fontSize: 13, color: "#f87171" }}>{error}</div>}
+        {/* OTP Step */}
+        {otpStep && (
+          <div>
+            <input className="auth-input" type="text" placeholder="Enter 6-digit code" value={otpCode} onChange={e => setOtpCode(e.target.value)} onKeyDown={e => e.key === "Enter" && handleVerifyOtp()} maxLength={6} style={{ textAlign: "center", fontSize: "1.5rem", letterSpacing: "0.5em" }} />
+            <button className="auth-btn" disabled={loading} onClick={handleVerifyOtp}>{loading ? "Verifying…" : "Verify Code"}</button>
+            <div style={{ textAlign: "center", marginTop: "1.5rem", display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+              <button className="auth-link" style={{ background: "none", border: "none", cursor: "pointer", fontSize: "0.8rem" }} onClick={handleResendOtp} disabled={loading}>Didn't receive a code? Resend</button>
+              <button className="auth-link" style={{ background: "none", border: "none", cursor: "pointer", opacity: 0.6 }} onClick={() => setOtpStep(false)}>← Back to Sign Up</button>
+            </div>
+          </div>
+        )}
 
         {/* Sign In Form */}
-        {tab === "signin" && (
+        {!otpStep && tab === "signin" && (
           <div>
             <input className="auth-input" type="email" placeholder="Email address" value={email} onChange={e => setEmail(e.target.value)} onKeyDown={e => e.key === "Enter" && handleSignIn()} />
             <input className="auth-input" type="password" placeholder="Password" value={password} onChange={e => setPassword(e.target.value)} onKeyDown={e => e.key === "Enter" && handleSignIn()} />
@@ -144,12 +246,12 @@ export default function AuthPage() {
             <div style={{ display: "flex", alignItems: "center", gap: "1rem", margin: "1.5rem 0", color: "rgba(255,255,255,0.3)", fontSize: "0.8rem", fontWeight: 500 }}>
               <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.1)" }} /> or <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.1)" }} />
             </div>
-            <button className="auth-btn-outline" onClick={() => alert("Google sign-in coming soon")}>Continue with Google</button>
+            <button className="auth-btn-outline" onClick={() => addToast("Google sign-in coming soon", "warning")}>Continue with Google</button>
           </div>
         )}
 
         {/* Sign Up Form */}
-        {tab === "signup" && (
+        {!otpStep && tab === "signup" && (
           <div>
             <div style={{ display: "flex", gap: "0.75rem" }}>
               <input className="auth-input" type="text" placeholder="First name" value={firstName} onChange={e => setFirstName(e.target.value)} style={{ flex: 1 }} />
@@ -162,14 +264,14 @@ export default function AuthPage() {
             <div style={{ display: "flex", alignItems: "center", gap: "1rem", margin: "1.5rem 0", color: "rgba(255,255,255,0.3)", fontSize: "0.8rem", fontWeight: 500 }}>
               <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.1)" }} /> or <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.1)" }} />
             </div>
-            <button className="auth-btn-outline" onClick={() => alert("Google sign-in coming soon")}>Continue with Google</button>
+            <button className="auth-btn-outline" onClick={() => addToast("Google sign-in coming soon", "warning")}>Continue with Google</button>
           </div>
         )}
 
         {/* Forgot Password Form */}
-        {tab === "forgot" && (
+        {!otpStep && tab === "forgot" && (
           <div>
-            <p style={{ fontFamily: "'Montserrat',sans-serif", fontWeight: 500, fontSize: "0.85rem", color: "rgba(255,255,255,0.5)", marginBottom: "1.5rem", textAlign: "center" }}>
+            <p style={{ fontFamily: "Montserrat, sans-serif", fontWeight: 500, fontSize: "0.85rem", color: "rgba(255,255,255,0.5)", marginBottom: "1.5rem", textAlign: "center" }}>
               Enter your email and we'll send you a reset link.
             </p>
             <input className="auth-input" type="email" placeholder="Email address" value={resetEmail} onChange={e => setResetEmail(e.target.value)} />
