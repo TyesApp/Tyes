@@ -54,15 +54,14 @@ export default function AuthPage() {
   const [resetEmail, setResetEmail] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [otpStep, setOtpStep] = useState(false);
-  const [otpCode, setOtpCode] = useState("");
-  
+
+
   useEffect(() => {
     setMounted(true);
   }, []);
 
-  const title = otpStep ? "Verify email" : tab === "signin" ? "Welcome back" : tab === "signup" ? "Create account" : "Reset password";
-  const subtitle = otpStep ? `We've sent a code to ${email}` : tab === "signin" ? "Sign in to your account or create a new one" : tab === "signup" ? "Get started with tyes today" : "We'll help you get back in";
+  const title = tab === "signin" ? "Welcome back" : tab === "signup" ? "Create account" : "Reset password";
+  const subtitle = tab === "signin" ? "Sign in to your account or create a new one" : tab === "signup" ? "Get started with tyes today" : "We'll help you get back in";
 
   if (!mounted) return null;
 
@@ -113,8 +112,9 @@ export default function AuthPage() {
       if (error) throw error;
 
       if (data.user) {
-        addToast("Verification code sent to your email!", "success");
-        setOtpStep(true);
+        addToast("Account created successfully!", "success");
+        const role = data.user.user_metadata?.role || "client";
+        router.push(role === "admin" ? "/dashboard/admin" : "/dashboard/client");
       }
     } catch (err: any) {
       addToast(err.message || "An error occurred", "error");
@@ -123,53 +123,6 @@ export default function AuthPage() {
     }
   };
 
-  const handleVerifyOtp = async () => {
-    setError("");
-    if (!otpCode) { addToast("Please enter the verification code", "error"); return; }
-    setLoading(true);
-
-    console.log("Attempting to verify OTP for:", email, "with code:", otpCode);
-
-    try {
-      const { data, error } = await supabase.auth.verifyOtp({
-        email,
-        token: otpCode,
-        type: 'signup'
-      });
-
-      if (error) {
-        console.error("OTP Verification Error:", error);
-        throw error;
-      }
-
-      if (data.user) {
-        console.log("OTP Verified successfully. User:", data.user);
-        addToast("Email verified successfully!", "success");
-        const role = data.user.user_metadata?.role || "client";
-        router.push(role === "admin" ? "/dashboard/admin" : "/dashboard/client");
-      }
-    } catch (err: any) {
-      addToast(err.message || "Invalid or expired code", "error");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleResendOtp = async () => {
-    setLoading(true);
-    try {
-      const { error } = await supabase.auth.resend({
-        type: 'signup',
-        email: email,
-      });
-      if (error) throw error;
-      addToast("New code sent to your email!", "success");
-    } catch (err: any) {
-      addToast(err.message || "Could not resend code", "error");
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleReset = () => {
     if (!resetEmail) { addToast("Please enter your email", "error"); return; }
@@ -215,27 +168,16 @@ export default function AuthPage() {
         <p style={{ fontFamily: "Montserrat, sans-serif", fontSize: "0.9rem", fontWeight: 500, color: "rgba(255,255,255,0.5)", textAlign: "center", marginBottom: "2.5rem" }}>{subtitle}</p>
 
         {/* Tabs */}
-        {!otpStep && tab !== "forgot" && (
+        {tab !== "forgot" && (
           <div style={{ display: "flex", gap: 0, marginBottom: "2rem", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, overflow: "hidden" }}>
             <button className={`auth-tab ${tab === "signin" ? "active" : ""}`} onClick={() => setTab("signin")}>Sign In</button>
             <button className={`auth-tab ${tab === "signup" ? "active" : ""}`} onClick={() => setTab("signup")}>Sign Up</button>
           </div>
         )}
 
-        {/* OTP Step */}
-        {otpStep && (
-          <div>
-            <input className="auth-input" type="text" placeholder="Enter 6-digit code" value={otpCode} onChange={e => setOtpCode(e.target.value)} onKeyDown={e => e.key === "Enter" && handleVerifyOtp()} maxLength={6} style={{ textAlign: "center", fontSize: "1.5rem", letterSpacing: "0.5em" }} />
-            <button className="auth-btn" disabled={loading} onClick={handleVerifyOtp}>{loading ? "Verifying…" : "Verify Code"}</button>
-            <div style={{ textAlign: "center", marginTop: "1.5rem", display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-              <button className="auth-link" style={{ background: "none", border: "none", cursor: "pointer", fontSize: "0.8rem" }} onClick={handleResendOtp} disabled={loading}>Didn't receive a code? Resend</button>
-              <button className="auth-link" style={{ background: "none", border: "none", cursor: "pointer", opacity: 0.6 }} onClick={() => setOtpStep(false)}>← Back to Sign Up</button>
-            </div>
-          </div>
-        )}
 
         {/* Sign In Form */}
-        {!otpStep && tab === "signin" && (
+        {tab === "signin" && (
           <div>
             <input className="auth-input" type="email" placeholder="Email address" value={email} onChange={e => setEmail(e.target.value)} onKeyDown={e => e.key === "Enter" && handleSignIn()} />
             <input className="auth-input" type="password" placeholder="Password" value={password} onChange={e => setPassword(e.target.value)} onKeyDown={e => e.key === "Enter" && handleSignIn()} />
@@ -251,7 +193,7 @@ export default function AuthPage() {
         )}
 
         {/* Sign Up Form */}
-        {!otpStep && tab === "signup" && (
+        {tab === "signup" && (
           <div>
             <div style={{ display: "flex", gap: "0.75rem" }}>
               <input className="auth-input" type="text" placeholder="First name" value={firstName} onChange={e => setFirstName(e.target.value)} style={{ flex: 1 }} />
@@ -269,7 +211,7 @@ export default function AuthPage() {
         )}
 
         {/* Forgot Password Form */}
-        {!otpStep && tab === "forgot" && (
+        {tab === "forgot" && (
           <div>
             <p style={{ fontFamily: "Montserrat, sans-serif", fontWeight: 500, fontSize: "0.85rem", color: "rgba(255,255,255,0.5)", marginBottom: "1.5rem", textAlign: "center" }}>
               Enter your email and we'll send you a reset link.
