@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
 import { LineChart, Line, BarChart, Bar, AreaChart, Area, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
-import { Search, Bell, ChevronDown, ChevronRight, Filter, Download, MoreVertical, Plus, Edit, Trash2, Eye, Check, X, Clock, RefreshCw, TrendingUp, TrendingDown, Users, ShoppingCart, DollarSign, Image, Settings, LogOut, Home, Package, CreditCard, BarChart2, UserCheck, Star, AlertCircle, ArrowUpRight, ArrowDownRight, Menu, ChevronLeft, Save, Mail, Globe, Zap, Shield, Key, Webhook, User } from "lucide-react";
+import { Search, Bell, ChevronDown, ChevronRight, Filter, Download, MoreVertical, Plus, Edit, Trash2, Eye, Check, X, Clock, RefreshCw, TrendingUp, TrendingDown, Users, ShoppingCart, DollarSign, Image, Settings, LogOut, Home, Package, CreditCard, BarChart2, UserCheck, Star, AlertCircle, ArrowUpRight, ArrowDownRight, Menu, ChevronLeft, Save, Mail, Globe, Zap, Shield, Key, Webhook, User, Upload } from "lucide-react";
 
 // TOAST NOTIFICATION SYSTEM
 const useToast = () => {
@@ -43,8 +43,8 @@ const Modal = ({ open, onClose, title, children, width }) => {
 };
 
 // DROPDOWN MENU
-const Dropdown = ({ items, onClose }) => (
-  <div style={{ position: "absolute", right: 0, top: "100%", zIndex: 100, background: "#1a1a1a", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 10, padding: 4, minWidth: 160, boxShadow: "0 12px 40px rgba(0,0,0,0.5)" }}>
+const Dropdown = ({ items, onClose, up }) => (
+  <div style={{ position: "absolute", right: 0, [up ? "bottom" : "top"]: "100%", zIndex: 100, background: "#1a1a1a", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 10, padding: 4, minWidth: 160, boxShadow: "0 12px 40px rgba(0,0,0,0.5)", marginBottom: up ? 8 : 0, marginTop: up ? 0 : 8 }}>
     {items.map((item, i) => item.divider ? (
       <div key={i} style={{ height: 1, background: "rgba(255,255,255,0.06)", margin: "4px 0" }} />
     ) : (
@@ -57,47 +57,6 @@ const Dropdown = ({ items, onClose }) => (
 );
 
 // MOCK DATA
-const revenueData = [
-  { month: "Sep", revenue: 2800, orders: 32 }, { month: "Oct", revenue: 4200, orders: 48 },
-  { month: "Nov", revenue: 5100, orders: 55 }, { month: "Dec", revenue: 7300, orders: 78 },
-  { month: "Jan", revenue: 6800, orders: 72 }, { month: "Feb", revenue: 8900, orders: 94 },
-  { month: "Mar", revenue: 11200, orders: 118 },
-];
-const categoryData = [
-  { name: "Makeup", value: 32, color: "#ec4899" }, { name: "Skincare", value: 28, color: "#34d399" },
-  { name: "Hair Care", value: 15, color: "#fbbf24" }, { name: "Fragrance", value: 12, color: "#c084fc" },
-  { name: "Supplements", value: 8, color: "#22d3ee" }, { name: "Fashion", value: 5, color: "#d946ef" },
-];
-const dailyOrders = [
-  { day: "Mon", orders: 12 }, { day: "Tue", orders: 18 }, { day: "Wed", orders: 15 },
-  { day: "Thu", orders: 22 }, { day: "Fri", orders: 28 }, { day: "Sat", orders: 8 }, { day: "Sun", orders: 5 },
-];
-const initOrders = [
-  { id: "ORD-3012", customer: "L'Oral Paris", email: "digital@loreal.com", plan: "Enterprise", images: 50, status: "in_progress", category: "Makeup", date: "2026-04-14", revenue: 2500, revisions: 0, progress: 35 },
-  { id: "ORD-3011", customer: "Glossier Inc.", email: "studio@glossier.com", plan: "Growth", images: 10, status: "revision", category: "Skincare", date: "2026-04-13", revenue: 80, revisions: 2, progress: 75 },
-  { id: "ORD-3010", customer: "Aesop", email: "creative@aesop.com", plan: "Starter", images: 5, status: "completed", category: "Skincare", date: "2026-04-12", revenue: 45, revisions: 1, progress: 100 },
-  { id: "ORD-3009", customer: "Fenty Beauty", email: "content@fentybeauty.com", plan: "Growth", images: 10, status: "delivered", category: "Makeup", date: "2026-04-11", revenue: 80, revisions: 0, progress: 100 },
-  { id: "ORD-3008", customer: "Olaplex", email: "marketing@olaplex.com", plan: "Starter", images: 5, status: "in_progress", category: "Hair Care", date: "2026-04-10", revenue: 45, revisions: 0, progress: 55 },
-  { id: "ORD-3007", customer: "Charlotte Tilbury", email: "studio@charlottetilbury.com", plan: "Growth", images: 10, status: "completed", category: "Makeup", date: "2026-04-09", revenue: 80, revisions: 1, progress: 100 },
-  { id: "ORD-3006", customer: "The Ordinary", email: "visuals@theordinary.com", plan: "Starter", images: 5, status: "delivered", category: "Skincare", date: "2026-04-08", revenue: 45, revisions: 0, progress: 100 },
-  { id: "ORD-3005", customer: "Jo Malone", email: "creative@jomalone.com", plan: "Single", images: 1, status: "delivered", category: "Fragrance", date: "2026-04-07", revenue: 10, revisions: 0, progress: 100 },
-  { id: "ORD-3004", customer: "Drunk Elephant", email: "brand@drunkelephant.com", plan: "Growth", images: 10, status: "revision", category: "Skincare", date: "2026-04-06", revenue: 80, revisions: 3, progress: 90 },
-  { id: "ORD-3003", customer: "MAC Cosmetics", email: "studio@maccosmetics.com", plan: "Enterprise", images: 30, status: "in_progress", category: "Makeup", date: "2026-04-05", revenue: 1500, revisions: 0, progress: 20 },
-  { id: "ORD-3002", customer: "Rare Beauty", email: "content@rarebeauty.com", plan: "Free Test", images: 1, status: "completed", category: "Makeup", date: "2026-04-04", revenue: 0, revisions: 0, progress: 100 },
-  { id: "ORD-3001", customer: "Byredo", email: "visuals@byredo.com", plan: "Starter", images: 5, status: "delivered", category: "Fragrance", date: "2026-04-03", revenue: 45, revisions: 1, progress: 100 },
-];
-const initUsers = [
-  { id: 1, name: "L'Oral Paris", email: "digital@loreal.com", orders: 12, spent: 8500, joined: "2025-11-02", status: "active", tier: "enterprise" },
-  { id: 2, name: "Glossier Inc.", email: "studio@glossier.com", orders: 8, spent: 640, joined: "2025-12-15", status: "active", tier: "pro" },
-  { id: 3, name: "Fenty Beauty", email: "content@fentybeauty.com", orders: 15, spent: 1200, joined: "2025-10-20", status: "active", tier: "pro" },
-  { id: 4, name: "Aesop", email: "creative@aesop.com", orders: 5, spent: 225, joined: "2026-01-10", status: "active", tier: "starter" },
-  { id: 5, name: "The Ordinary", email: "visuals@theordinary.com", orders: 3, spent: 135, joined: "2026-02-28", status: "active", tier: "starter" },
-  { id: 6, name: "Charlotte Tilbury", email: "studio@charlottetilbury.com", orders: 6, spent: 480, joined: "2026-01-05", status: "active", tier: "pro" },
-  { id: 7, name: "Drunk Elephant", email: "brand@drunkelephant.com", orders: 4, spent: 320, joined: "2026-03-01", status: "active", tier: "starter" },
-  { id: 8, name: "MAC Cosmetics", email: "studio@maccosmetics.com", orders: 9, spent: 5400, joined: "2025-09-18", status: "active", tier: "enterprise" },
-  { id: 9, name: "Jo Malone", email: "creative@jomalone.com", orders: 2, spent: 20, joined: "2026-03-20", status: "inactive", tier: "free" },
-  { id: 10, name: "Rare Beauty", email: "content@rarebeauty.com", orders: 1, spent: 0, joined: "2026-04-01", status: "active", tier: "free" },
-];
 const initPlans = [
   { id: 0, name: "Free Test", images: 1, price: 0, active: true },
   { id: 1, name: "Single", images: 1, price: 10, active: true },
@@ -106,27 +65,28 @@ const initPlans = [
   { id: 4, name: "Social Media Pack", images: 7, price: 55, active: true },
   { id: 5, name: "Custom / Enterprise", images: 0, price: 0, active: true },
 ];
-const activityLog = [
-  { time: "2 min ago", action: "New order", detail: "ORD-3012 from L'Oral Paris", type: "order" },
-  { time: "18 min ago", action: "Revision requested", detail: "ORD-3011  Glossier (rev 2)", type: "revision" },
-  { time: "1 hr ago", action: "Order completed", detail: "ORD-3010 delivered to Aesop", type: "complete" },
-  { time: "2 hrs ago", action: "New signup", detail: "Rare Beauty joined (Free Test)", type: "user" },
-  { time: "3 hrs ago", action: "Payment received", detail: "$80 from Fenty Beauty", type: "payment" },
-  { time: "5 hrs ago", action: "Order completed", detail: "ORD-3006 delivered to The Ordinary", type: "complete" },
-];
-
 // HELPERS
 const statusConfig = {
+  pending: { label: "Pending", bg: "rgba(107,114,128,0.15)", color: "#9ca3af", icon: Clock },
   in_progress: { label: "In Progress", bg: "rgba(59,130,246,0.15)", color: "#60a5fa", icon: Clock },
   revision: { label: "Revision", bg: "rgba(251,191,36,0.15)", color: "#fbbf24", icon: RefreshCw },
   completed: { label: "Completed", bg: "rgba(16,185,129,0.15)", color: "#34d399", icon: Check },
   delivered: { label: "Delivered", bg: "rgba(78,205,196,0.15)", color: "#4ecdc4", icon: Package },
+  approved: { label: "Approved", bg: "rgba(16,185,129,0.15)", color: "#34d399", icon: Check },
 };
 const tierColors = { free: "#6b7280", starter: "#60a5fa", pro: "#4ecdc4", enterprise: "#f472b6" };
 const fmt = (n) => n >= 1000 ? `$${(n / 1000).toFixed(1)}k` : `$${n}`;
 
 // SHARED COMPONENTS
-const StatusBadge = ({ status }) => { const c = statusConfig[status]; const I = c.icon; return <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 10px", borderRadius: 20, background: c.bg, color: c.color, fontSize: 11, fontWeight: 600 }}><I size={11} /> {c.label}</span>; };
+const StatusBadge = ({ status }) => {
+  const c = statusConfig[status] || statusConfig.pending;
+  const I = c.icon || Clock;
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 10px", borderRadius: 20, background: c.bg, color: c.color, fontSize: 11, fontWeight: 600 }}>
+      <I size={11} /> {c.label}
+    </span>
+  );
+};
 
 const StatCard = ({ icon: Icon, label, value, change, positive, sub }) => (
   <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 16, padding: "20px 22px", flex: 1, minWidth: 200 }}>
@@ -156,43 +116,79 @@ const InputField = ({ label, value, onChange, placeholder, type }) => (
 // PAGES
 
 const DashboardPage = ({ toast, goTo, orders, users }) => {
-  // Calculate Dynamic Stats
+  // 1. Core Stats
   const totalRevenue = orders.reduce((sum, o) => sum + (o.revenue || 0), 0);
   const totalImages = orders.reduce((sum, o) => sum + (o.images || 0), 0);
   const activeClients = users.length;
 
-  // Dynamic Category Data
-  const categories = orders.reduce((acc, o) => {
-    const cat = o.category || "Other";
+  // 2. Revenue Trend (Monthly)
+  const monthOrder = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const monthlyMap = orders.reduce((acc, o) => {
+    const d = new Date(o.created_at);
+    const m = d.toLocaleString('default', { month: 'short' });
+    if (!acc[m]) acc[m] = { month: m, revenue: 0, orders: 0, sortKey: d.getMonth() };
+    acc[m].revenue += (o.revenue || 0);
+    acc[m].orders += 1;
+    return acc;
+  }, {});
+  const dynRevenueData = Object.values(monthlyMap).sort((a, b) => a.sortKey - b.sortKey);
+
+  // 3. Orders by Category
+  const categoryStats = orders.reduce((acc, o) => {
+    const cat = o.category || "Uncategorized";
     acc[cat] = (acc[cat] || 0) + 1;
     return acc;
   }, {});
-
-  const dynCategoryData = Object.entries(categories).map(([name, value], i) => ({
+  const dynCategoryData = Object.entries(categoryStats).map(([name, count], i) => ({
     name,
-    value: Math.round((value / orders.length) * 100) || 0,
-    color: ["#4ecdc4", "#45b7af", "#3aa39b", "#2f8f87", "#247a73"][i % 5]
-  })).slice(0, 5);
+    value: Math.round((count / orders.length) * 100) || 0,
+    color: ["#4ecdc4", "#ec4899", "#fbbf24", "#60a5fa", "#c084fc", "#34d399"][i % 6]
+  })).sort((a, b) => b.value - a.value).slice(0, 5);
+
+  // 4. Weekly Activity (Last 7 Days)
+  const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const last7Days = [...Array(7)].map((_, i) => {
+    const d = new Date();
+    d.setDate(d.getDate() - (6 - i));
+    return { name: dayNames[d.getDay()], dateStr: d.toISOString().split('T')[0], orders: 0 };
+  });
+
+  orders.forEach(o => {
+    const oDate = o.created_at.split('T')[0];
+    const dayMatch = last7Days.find(d => d.dateStr === oDate);
+    if (dayMatch) dayMatch.orders += 1;
+  });
 
   return (
     <div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 28 }}>
         <div><h1 style={{ fontSize: 24, fontWeight: 800, color: "#fff", margin: 0 }}>Dashboard</h1><p style={{ fontSize: 13, color: "#6b7280", margin: 0 }}>Welcome back. Here's what's happening today.</p></div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <button onClick={() => toast("Full report exported", "success")} style={{ padding: "8px 16px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.03)", color: "#9ca3af", fontSize: 12, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}><Download size={13} /> Export</button>
-          <button onClick={() => goTo("orders")} style={{ padding: "8px 16px", borderRadius: 10, border: "none", background: "linear-gradient(135deg,#4ecdc4,#2ab7a9)", color: "#fff", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>+ New Order</button>
-        </div>
+
       </div>
+
       <div style={{ display: "flex", gap: 16, marginBottom: 24, flexWrap: "wrap" }}>
         <StatCard icon={DollarSign} label="Total Revenue" value={fmt(totalRevenue)} sub="Direct from database" />
-        <StatCard icon={ShoppingCart} label="Total Orders" value={orders.length} sub={`${orders.filter(o => o.status === 'completed').length} completed`} />
+        <StatCard icon={ShoppingCart} label="Total Orders" value={orders.length} sub={`${orders.filter(o => o.status === 'completed' || o.status === 'delivered').length} completed`} />
         <StatCard icon={Users} label="Total Clients" value={activeClients} sub="Registered users" />
         <StatCard icon={Image} label="Images Delivered" value={totalImages} sub="Across all orders" />
       </div>
+
       <div style={{ display: "flex", gap: 16, marginBottom: 24, flexWrap: "wrap" }}>
         <div style={{ flex: 2, minWidth: 400, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 16, padding: 22 }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18 }}><h3 style={{ fontSize: 14, fontWeight: 700, color: "#fff", margin: 0 }}>Revenue Trend</h3><span style={{ fontSize: 11, color: "#6b7280" }}>Historical Growth</span></div>
-          <ResponsiveContainer width="100%" height={240}><AreaChart data={revenueData}><defs><linearGradient id="gr" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#4ecdc4" stopOpacity={0.3} /><stop offset="100%" stopColor="#4ecdc4" stopOpacity={0} /></linearGradient></defs><CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" /><XAxis dataKey="month" tick={{ fill: "#6b7280", fontSize: 11 }} axisLine={false} tickLine={false} /><YAxis tick={{ fill: "#6b7280", fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={v => `$${v / 1000}k`} /><Tooltip contentStyle={{ background: "#1a1a1a", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 10, fontSize: 12, color: "#fff" }} /><Area type="monotone" dataKey="revenue" stroke="#4ecdc4" fill="url(#gr)" strokeWidth={2.5} dot={{ fill: "#4ecdc4", r: 4, strokeWidth: 0 }} /></AreaChart></ResponsiveContainer>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18 }}>
+            <h3 style={{ fontSize: 14, fontWeight: 700, color: "#fff", margin: 0 }}>Revenue Trend</h3>
+            <span style={{ fontSize: 11, color: "#6b7280" }}>Historical Growth</span>
+          </div>
+          <ResponsiveContainer width="100%" height={240}>
+            <AreaChart data={dynRevenueData.length ? dynRevenueData : [{ month: "No data", revenue: 0 }]}>
+              <defs><linearGradient id="gr" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#4ecdc4" stopOpacity={0.3} /><stop offset="100%" stopColor="#4ecdc4" stopOpacity={0} /></linearGradient></defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
+              <XAxis dataKey="month" tick={{ fill: "#6b7280", fontSize: 11 }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fill: "#6b7280", fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={v => `$${v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v}`} />
+              <Tooltip contentStyle={{ background: "#1a1a1a", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 10, fontSize: 12, color: "#fff" }} />
+              <Area type="monotone" dataKey="revenue" stroke="#4ecdc4" fill="url(#gr)" strokeWidth={2.5} dot={{ fill: "#4ecdc4", r: 4, strokeWidth: 0 }} />
+            </AreaChart>
+          </ResponsiveContainer>
         </div>
         <div style={{ flex: 1, minWidth: 260, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 16, padding: 22 }}>
           <h3 style={{ fontSize: 14, fontWeight: 700, color: "#fff", margin: "0 0 18px" }}>Orders by Category</h3>
@@ -205,22 +201,36 @@ const DashboardPage = ({ toast, goTo, orders, users }) => {
             </PieChart>
           </ResponsiveContainer>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 8 }}>
-            {dynCategoryData.map((d, i) => <span key={i} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: "#9ca3af" }}><span style={{ width: 7, height: 7, borderRadius: "50%", background: d.color, display: "inline-block" }} />{d.name} ({d.value}%)</span>)}
+            {dynCategoryData.length ? dynCategoryData.map((d, i) => (
+              <span key={i} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: "#9ca3af" }}>
+                <span style={{ width: 7, height: 7, borderRadius: "50%", background: d.color, display: "inline-block" }} />
+                {d.name} ({d.value}%)
+              </span>
+            )) : <span style={{ fontSize: 11, color: "#6b7280" }}>No categories found</span>}
           </div>
         </div>
       </div>
+
       <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
         <div style={{ flex: 2, minWidth: 400, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 16, padding: 22 }}>
           <h3 style={{ fontSize: 14, fontWeight: 700, color: "#fff", margin: "0 0 18px" }}>This Week</h3>
-          <ResponsiveContainer width="100%" height={200}><BarChart data={dailyOrders} barSize={28}><CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" /><XAxis dataKey="day" tick={{ fill: "#6b7280", fontSize: 11 }} axisLine={false} tickLine={false} /><YAxis tick={{ fill: "#6b7280", fontSize: 11 }} axisLine={false} tickLine={false} /><Tooltip contentStyle={{ background: "#1a1a1a", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 10, fontSize: 12, color: "#fff" }} /><Bar dataKey="orders" fill="#4ecdc4" radius={[6, 6, 0, 0]} /></BarChart></ResponsiveContainer>
+          <ResponsiveContainer width="100%" height={200}>
+            <BarChart data={last7Days} barSize={28}>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
+              <XAxis dataKey="name" tick={{ fill: "#6b7280", fontSize: 11 }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fill: "#6b7280", fontSize: 11 }} axisLine={false} tickLine={false} />
+              <Tooltip contentStyle={{ background: "#1a1a1a", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 10, fontSize: 12, color: "#fff" }} />
+              <Bar dataKey="orders" fill="#4ecdc4" radius={[6, 6, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
         </div>
         <div style={{ flex: 1, minWidth: 260, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 16, padding: 22 }}>
           <h3 style={{ fontSize: 14, fontWeight: 700, color: "#fff", margin: "0 0 16px" }}>Recent Activity</h3>
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             {orders.slice(0, 5).map((o, i) => (
               <div key={i} style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
-                <div style={{ width: 6, height: 6, borderRadius: "50%", marginTop: 5, flexShrink: 0, background: "#60a5fa" }} />
-                <div><div style={{ fontSize: 12, color: "#d1d5db", fontWeight: 500 }}>New Order {o.id}</div><div style={{ fontSize: 11, color: "#6b7280" }}>From {o.customer}</div><div style={{ fontSize: 10, color: "#4b5563", marginTop: 2 }}>{o.date}</div></div>
+                <div style={{ width: 6, height: 6, borderRadius: "50%", marginTop: 5, flexShrink: 0, background: statusConfig[o.status || 'pending'].color }} />
+                <div><div style={{ fontSize: 12, color: "#d1d5db", fontWeight: 500 }}>{statusConfig[o.status || 'pending'].label}: {o.id}</div><div style={{ fontSize: 11, color: "#6b7280" }}>From {o.customer}</div><div style={{ fontSize: 10, color: "#4b5563", marginTop: 2 }}>{o.date}</div></div>
               </div>
             ))}
             {orders.length === 0 && <p style={{ fontSize: 12, color: "#4b5563" }}>No recent activity.</p>}
@@ -236,8 +246,30 @@ const OrdersPage = ({ orders, setOrders, toast, goTo, supabase }) => {
   const [search, setSearch] = useState("");
   const [menuOpen, setMenuOpen] = useState(null);
   const [viewOrder, setViewOrder] = useState(null);
-  const filtered = orders.filter(o => { if (filter !== "all" && o.status !== filter) return false; if (search && !o.customer.toLowerCase().includes(search.toLowerCase()) && !o.id.toLowerCase().includes(search.toLowerCase())) return false; return true; });
-  const counts = { all: orders.length, in_progress: orders.filter(o => o.status === "in_progress").length, revision: orders.filter(o => o.status === "revision").length, completed: orders.filter(o => o.status === "completed").length, delivered: orders.filter(o => o.status === "delivered").length };
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
+
+  const filtered = orders.filter(o => {
+    if (filter !== "all" && o.status !== filter) return false;
+    const searchLow = search.toLowerCase();
+    const customerMatch = o.customer && o.customer.toLowerCase().includes(searchLow);
+    const idMatch = o.id && o.id.toString().toLowerCase().includes(searchLow);
+    if (search && !customerMatch && !idMatch) return false;
+    return true;
+  });
+
+  const totalPages = Math.ceil(filtered.length / itemsPerPage);
+  const paginatedOrders = filtered.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
+  const counts = {
+    all: orders.length,
+    pending: orders.filter(o => o.status === "pending").length,
+    in_progress: orders.filter(o => o.status === "in_progress").length,
+    revision: orders.filter(o => o.status === "revision").length,
+    completed: orders.filter(o => o.status === "completed").length,
+    delivered: orders.filter(o => o.status === "delivered").length,
+    approved: orders.filter(o => o.status === "approved").length
+  };
 
   const updateStatus = async (id, newStatus) => {
     try {
@@ -276,6 +308,60 @@ const OrdersPage = ({ orders, setOrders, toast, goTo, supabase }) => {
     }
   };
 
+  const uploadFinishImage = async (orderId, itemIndex, file) => {
+    const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
+    const uploadPreset = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
+
+    if (!cloudName || !uploadPreset) {
+      toast("Cloudinary not configured", "error");
+      return;
+    }
+
+    toast("Uploading delivery...", "info");
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("upload_preset", uploadPreset);
+      const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/upload`, { method: "POST", body: formData });
+      const data = await res.json();
+      const url = data.secure_url;
+
+      if (!url) throw new Error("Upload failed");
+
+      const order = orders.find(o => o.id === orderId);
+      if (!order) return;
+
+      const newItems = [...(order.items || [])];
+      newItems[itemIndex] = { ...newItems[itemIndex], finishImage: url, status: "delivered" };
+
+      const allDelivered = newItems.every(i => i.status === "delivered" || i.status === "completed");
+      const newOrderStatus = allDelivered ? "delivered" : "in_progress";
+      const newProgress = allDelivered ? 100 : Math.round((newItems.filter(i => i.status === "delivered" || i.status === "completed").length / newItems.length) * 100);
+
+      const { error } = await supabase
+        .from('orders')
+        .update({
+          items: newItems,
+          status: newOrderStatus,
+          progress: newProgress
+        })
+        .eq('id', orderId);
+
+      if (error) throw error;
+
+      const updateFunc = (prev) => prev.map(o => o.id === orderId ? { ...o, items: newItems, status: newOrderStatus, progress: newProgress } : o);
+      setOrders(updateFunc);
+      if (viewOrder && viewOrder.id === orderId) {
+        setViewOrder({ ...viewOrder, items: newItems, status: newOrderStatus, progress: newProgress });
+      }
+
+      toast("Item delivered!");
+    } catch (err) {
+      console.error("Delivery error:", err);
+      toast("Failed to deliver image", "error");
+    }
+  };
+
   return (
     <div>
       <Modal open={!!viewOrder} onClose={() => setViewOrder(null)} title={`Order ${viewOrder?.id}`} width={520}>
@@ -296,22 +382,96 @@ const OrdersPage = ({ orders, setOrders, toast, goTo, supabase }) => {
               <span style={{ fontSize: 11, color: "#6b7280" }}>Change status:</span>
               {Object.keys(statusConfig).map(s => <button key={s} onClick={() => { updateStatus(viewOrder.id, s); setViewOrder({ ...viewOrder, status: s }); }} style={{ padding: "4px 10px", borderRadius: 16, border: `1px solid ${statusConfig[s].color}33`, background: viewOrder.status === s ? statusConfig[s].bg : "transparent", color: statusConfig[s].color, fontSize: 11, cursor: "pointer" }}>{statusConfig[s].label}</button>)}
             </div>
+
+            {viewOrder.items && viewOrder.items.length > 0 && (
+              <div style={{ marginTop: 16 }}>
+                <span style={{ fontSize: 11, color: "#6b7280", display: "block", marginBottom: 8, textTransform: "uppercase" }}>Order Items</span>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                  {viewOrder.items.map((item, i) => (
+                    <div key={i} style={{ padding: 12, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 12 }}>
+                      <div style={{ fontSize: 12, color: "#fff", fontWeight: 600, marginBottom: 8, display: "flex", justifyContent: "space-between" }}>
+                        <span>{item.name}</span>
+                        {item.finishImage && <Check size={14} color="#34d399" />}
+                      </div>
+                      <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+                        <div onClick={() => window.open(item.mainImage, '_blank')} style={{ flex: 1, height: 60, borderRadius: 8, background: `url(${item.mainImage}) center/cover`, border: "1px solid rgba(255,255,255,0.1)", cursor: "pointer", position: "relative" }} title="Original Image">
+                          <span style={{ position: "absolute", bottom: 2, left: 4, fontSize: 8, color: "#fff", background: "rgba(0,0,0,0.5)", padding: "1px 4px", borderRadius: 4 }}>ORIGINAL</span>
+                        </div>
+                        <div style={{ flex: 1, height: 60, borderRadius: 8, background: `url(${item.finishImage || ''}) center/cover`, border: item.finishImage ? "1px solid rgba(52,211,153,0.3)" : "1px dashed rgba(255,255,255,0.1)", position: "relative", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }} title={item.finishImage ? "Replace Delivery" : "Upload Delivery"}>
+                          {!item.finishImage && <Upload size={14} color="#6b7280" />}
+                          {item.finishImage && (
+                            <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", opacity: 0, transition: "opacity 0.2s" }} onMouseEnter={e => e.currentTarget.style.opacity = 1} onMouseLeave={e => e.currentTarget.style.opacity = 0}>
+                              <RefreshCw size={14} color="#fff" />
+                              <div style={{ position: "absolute", bottom: 2, left: 4, fontSize: 8, color: "#fff", background: "#34d399", padding: "1px 4px", borderRadius: 4 }}>REPLACE</div>
+                            </div>
+                          )}
+                          {!item.finishImage && (
+                            <span style={{ position: "absolute", bottom: 2, left: 4, fontSize: 8, color: "#fff", background: "rgba(0,0,0,0.5)", padding: "1px 4px", borderRadius: 4 }}>
+                              DELIVER
+                            </span>
+                          )}
+                          <input
+                            type="file"
+                            style={{ position: "absolute", inset: 0, opacity: 0, cursor: "pointer", zIndex: 10 }}
+                            onChange={(e) => e.target.files[0] && uploadFinishImage(viewOrder.id, i, e.target.files[0])}
+                            accept="image/*"
+                            title={item.finishImage ? "Replace Delivered Image" : "Upload Finished Image"}
+                          />
+                        </div>
+                      </div>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <StatusBadge status={item.status} />
+                        {!item.finishImage && <span style={{ fontSize: 10, color: "#6b7280" }}>Click + to deliver</span>}
+                      </div>
+
+                      {item.status === "revision" && item.revisionReason && (
+                        <div style={{ marginTop: 10, padding: 8, borderRadius: 8, background: "rgba(251,191,36,0.05)", border: "1px solid rgba(251,191,36,0.15)" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+                            <AlertCircle size={10} color="#fbbf24" />
+                            <span style={{ fontSize: 10, fontWeight: 700, color: "#fbbf24", textTransform: "uppercase" }}>Revision Requested</span>
+                          </div>
+                          <div style={{ fontSize: 11, color: "#d1d5db", lineHeight: "1.4", fontStyle: "italic" }}>
+                            "{item.revisionReason}"
+                          </div>
+                          {item.revisionDate && <div style={{ fontSize: 9, color: "#4b5563", marginTop: 4 }}>Requested on {new Date(item.revisionDate).toLocaleDateString()}</div>}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </Modal>
 
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24 }}>
-        <h1 style={{ fontSize: 24, fontWeight: 800, color: "#fff", margin: 0 }}>Orders</h1>
-        <button onClick={() => toast("New order form would open here", "info")} style={{ padding: "8px 16px", borderRadius: 10, border: "none", background: "linear-gradient(135deg,#4ecdc4,#2ab7a9)", color: "#fff", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>+ New Order</button>
-      </div>
+
       <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
-        {["all", "in_progress", "revision", "completed", "delivered"].map(s => <button key={s} onClick={() => setFilter(s)} style={{ padding: "6px 14px", borderRadius: 20, border: "1px solid", borderColor: filter === s ? "rgba(78,205,196,0.5)" : "rgba(255,255,255,0.06)", background: filter === s ? "rgba(78,205,196,0.15)" : "transparent", color: filter === s ? "#4ecdc4" : "#6b7280", fontSize: 12, fontWeight: 500, cursor: "pointer" }}>{s === "all" ? "All" : statusConfig[s]?.label} ({counts[s]})</button>)}
+        {["all", "pending", "in_progress", "revision", "completed", "delivered"].map(s => (
+          <button
+            key={s}
+            onClick={() => setFilter(s)}
+            style={{
+              padding: "6px 14px",
+              borderRadius: 20,
+              border: "1px solid",
+              borderColor: filter === s ? "rgba(78,205,196,0.5)" : "rgba(255,255,255,0.06)",
+              background: filter === s ? "rgba(78,205,196,0.15)" : "transparent",
+              color: filter === s ? "#4ecdc4" : "#6b7280",
+              fontSize: 12,
+              fontWeight: 500,
+              cursor: "pointer"
+            }}
+          >
+            {s === "all" ? "All" : statusConfig[s]?.label} ({counts[s] || 0})
+          </button>
+        ))}
       </div>
-      <div style={{ marginBottom: 16, position: "relative" }}><Search size={14} style={{ position: "absolute", left: 12, top: 10, color: "#4b5563" }} /><input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search orders or clients..." style={{ width: "100%", maxWidth: 360, padding: "8px 12px 8px 34px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.03)", color: "#fff", fontSize: 12, outline: "none" }} /></div>
+      <div style={{ marginBottom: 16, position: "relative" }}><Search size={14} style={{ position: "absolute", left: 12, top: 10, color: "#4b5563" }} /><input value={search} onChange={e => { setSearch(e.target.value); setCurrentPage(1); }} placeholder="Search orders or clients..." style={{ width: "100%", maxWidth: 360, padding: "8px 12px 8px 34px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.03)", color: "#fff", fontSize: 12, outline: "none" }} /></div>
       <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 16, overflow: "hidden" }}>
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead><tr style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>{["Order", "Client", "Plan", "Imgs", "Status", "Progress", "Revenue", "Date", ""].map((h, i) => <th key={i} style={{ padding: "12px 16px", textAlign: "left", fontSize: 11, fontWeight: 600, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em" }}>{h}</th>)}</tr></thead>
-          <tbody>{filtered.map(o => (
+          <tbody>{paginatedOrders.map((o, idx) => (
             <tr key={o.id} style={{ borderBottom: "1px solid rgba(255,255,255,0.03)" }} onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.02)"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
               <td style={{ padding: "12px 16px", fontSize: 12, color: "#7dd8d0", fontWeight: 600, cursor: "pointer" }} onClick={() => setViewOrder(o)}>{o.id}</td>
               <td style={{ padding: "12px 16px" }}><div style={{ fontSize: 12, color: "#e5e7eb", fontWeight: 500 }}>{o.customer}</div><div style={{ fontSize: 11, color: "#4b5563" }}>{o.category}</div></td>
@@ -323,9 +483,9 @@ const OrdersPage = ({ orders, setOrders, toast, goTo, supabase }) => {
               <td style={{ padding: "12px 16px", fontSize: 11, color: "#6b7280" }}>{o.date}</td>
               <td style={{ padding: "12px 16px", position: "relative" }}>
                 <button onClick={() => setMenuOpen(menuOpen === o.id ? null : o.id)} style={{ background: "none", border: "none", color: "#4b5563", cursor: "pointer", padding: 4 }}><MoreVertical size={14} /></button>
-                {menuOpen === o.id && <Dropdown onClose={() => setMenuOpen(null)} items={[
+                {menuOpen === o.id && <Dropdown onClose={() => setMenuOpen(null)} up={idx > 4} items={[
                   { icon: Eye, label: "View Details", action: () => setViewOrder(o) },
-                  { icon: Mail, label: "Email Client", action: () => toast(`Email draft opened for ${o.customer}`, "info") },
+                  // { icon: Mail, label: "Email Client", action: () => toast(`Email draft opened for ${o.customer}`, "info") },
                   { divider: true },
                   { icon: Clock, label: "Mark In Progress", action: () => updateStatus(o.id, "in_progress") },
                   { icon: RefreshCw, label: "Mark Revision", action: () => updateStatus(o.id, "revision") },
@@ -338,8 +498,48 @@ const OrdersPage = ({ orders, setOrders, toast, goTo, supabase }) => {
             </tr>
           ))}</tbody>
         </table>
-        {filtered.length === 0 && <div style={{ padding: 40, textAlign: "center", color: "#4b5563", fontSize: 13 }}>No orders found.</div>}
+        {paginatedOrders.length === 0 && <div style={{ padding: 40, textAlign: "center", color: "#4b5563", fontSize: 13 }}>No orders found.</div>}
       </div>
+
+      {totalPages > 1 && (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 20, padding: "0 4px" }}>
+          <div style={{ fontSize: 12, color: "#4b5563" }}>
+            Showing <span style={{ color: "#9ca3af" }}>{(currentPage - 1) * itemsPerPage + 1}</span> to <span style={{ color: "#9ca3af" }}>{Math.min(currentPage * itemsPerPage, filtered.length)}</span> of <span style={{ color: "#9ca3af" }}>{filtered.length}</span> orders
+          </div>
+          <div style={{ display: "flex", gap: 6 }}>
+            <button
+              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+              style={{ padding: "6px 12px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.02)", color: currentPage === 1 ? "#374151" : "#9ca3af", fontSize: 12, cursor: currentPage === 1 ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: 4 }}
+            >
+              <ChevronLeft size={14} /> Previous
+            </button>
+            {[...Array(totalPages)].map((_, i) => {
+              const p = i + 1;
+              if (totalPages > 5 && Math.abs(p - currentPage) > 1 && p !== 1 && p !== totalPages) {
+                if (Math.abs(p - currentPage) === 2) return <span key={p} style={{ color: "#374151", padding: "0 4px" }}>...</span>;
+                return null;
+              }
+              return (
+                <button
+                  key={p}
+                  onClick={() => setCurrentPage(p)}
+                  style={{ width: 32, height: 32, borderRadius: 8, border: "1px solid", borderColor: currentPage === p ? "rgba(78,205,196,0.3)" : "rgba(255,255,255,0.06)", background: currentPage === p ? "rgba(78,205,196,0.15)" : "rgba(255,255,255,0.02)", color: currentPage === p ? "#4ecdc4" : "#9ca3af", fontSize: 12, fontWeight: 600, cursor: "pointer" }}
+                >
+                  {p}
+                </button>
+              );
+            })}
+            <button
+              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+              disabled={currentPage === totalPages}
+              style={{ padding: "6px 12px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.02)", color: currentPage === totalPages ? "#374151" : "#9ca3af", fontSize: 12, cursor: currentPage === totalPages ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: 4 }}
+            >
+              Next <ChevronRight size={14} />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -351,6 +551,11 @@ const UsersPage = ({ users, setUsers, toast, supabase }) => {
   // Only show users with the 'client' role on this page
   const clients = users.filter(u => u.role === "client");
   const filtered = clients.filter(u => !search || u.name.toLowerCase().includes(search.toLowerCase()) || u.email.toLowerCase().includes(search.toLowerCase()));
+
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 8;
+  const totalPages = Math.ceil(filtered.length / itemsPerPage);
+  const paginatedClients = filtered.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   const toggleStatus = async (id) => {
     const user = users.find(u => u.id === id);
@@ -441,11 +646,11 @@ const UsersPage = ({ users, setUsers, toast, supabase }) => {
         <StatCard icon={Star} label="Enterprise" value={counts.enterprise} />
         <StatCard icon={DollarSign} label="Total Revenue" value={fmt(counts.revenue)} />
       </div>
-      <div style={{ marginBottom: 16, position: "relative" }}><Search size={14} style={{ position: "absolute", left: 12, top: 10, color: "#4b5563" }} /><input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search clients..." style={{ width: "100%", maxWidth: 360, padding: "8px 12px 8px 34px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.03)", color: "#fff", fontSize: 12, outline: "none" }} /></div>
+      <div style={{ marginBottom: 16, position: "relative" }}><Search size={14} style={{ position: "absolute", left: 12, top: 10, color: "#4b5563" }} /><input value={search} onChange={e => { setSearch(e.target.value); setCurrentPage(1); }} placeholder="Search clients..." style={{ width: "100%", maxWidth: 360, padding: "8px 12px 8px 34px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.03)", color: "#fff", fontSize: 12, outline: "none" }} /></div>
       <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 16, overflow: "hidden" }}>
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead><tr style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>{["Client", "Email", "Tier", "Orders", "Spent", "Joined", "Status", ""].map((h, i) => <th key={i} style={{ padding: "12px 16px", textAlign: "left", fontSize: 11, fontWeight: 600, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em" }}>{h}</th>)}</tr></thead>
-          <tbody>{filtered.map(u => (
+          <tbody>{paginatedClients.map((u, idx) => (
             <tr key={u.id} style={{ borderBottom: "1px solid rgba(255,255,255,0.03)" }} onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.02)"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
               <td style={{ padding: "12px 16px" }}><div style={{ display: "flex", alignItems: "center", gap: 10 }}><div style={{ width: 32, height: 32, borderRadius: 8, background: `linear-gradient(135deg,${tierColors[u.tier]},${tierColors[u.tier]}88)`, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700, fontSize: 12 }}>{u.name.charAt(0)}</div><span style={{ fontSize: 13, color: "#e5e7eb", fontWeight: 500, cursor: "pointer" }} onClick={() => setViewUser(u)}>{u.name}</span></div></td>
               <td style={{ padding: "12px 16px", fontSize: 12, color: "#6b7280" }}>{u.email}</td>
@@ -454,11 +659,62 @@ const UsersPage = ({ users, setUsers, toast, supabase }) => {
               <td style={{ padding: "12px 16px", fontSize: 12, color: "#34d399", fontWeight: 600 }}>{u.spent > 0 ? `$${u.spent.toLocaleString()}` : ""}</td>
               <td style={{ padding: "12px 16px", fontSize: 11, color: "#6b7280" }}>{u.joined}</td>
               <td style={{ padding: "12px 16px" }}><span onClick={() => toggleStatus(u.id)} style={{ cursor: "pointer" }}><span style={{ width: 6, height: 6, borderRadius: "50%", display: "inline-block", background: u.status === "active" ? "#34d399" : "#4b5563", marginRight: 6 }} /><span style={{ fontSize: 11, color: u.status === "active" ? "#34d399" : "#6b7280" }}>{u.status}</span></span></td>
-              <td style={{ padding: "12px 16px" }}><button onClick={() => setViewUser(u)} style={{ background: "none", border: "none", color: "#4b5563", cursor: "pointer", padding: 4 }}><Eye size={14} /></button></td>
+              <td style={{ padding: "12px 16px", position: "relative" }}>
+                 <button onClick={() => setMenuOpen(menuOpen === u.id ? null : u.id)} style={{ background: "none", border: "none", color: "#4b5563", cursor: "pointer", padding: 4 }}><MoreVertical size={14} /></button>
+                 {menuOpen === u.id && <Dropdown onClose={() => setMenuOpen(null)} up={idx > 4} items={[
+                   { icon: Eye, label: "View Profile", action: () => setViewUser(u) },
+                   { icon: Mail, label: "Send Email", action: () => toast(`Email draft opened for ${u.name}`, "info") },
+                   { divider: true },
+                   { icon: u.status === "active" ? X : Check, label: u.status === "active" ? "Block Client" : "Unblock Client", action: () => toggleStatus(u.id), danger: u.status === "active" },
+                 ]} />}
+              </td>
             </tr>
           ))}</tbody>
         </table>
+        {paginatedClients.length === 0 && <div style={{ padding: 40, textAlign: "center", color: "#4b5563", fontSize: 13 }}>No clients found.</div>}
       </div>
+
+      {filtered.length > 0 && (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 20, padding: "0 4px" }}>
+          <div style={{ fontSize: 12, color: "#4b5563" }}>
+            Showing <span style={{ color: "#9ca3af" }}>{(currentPage - 1) * itemsPerPage + 1}</span> to <span style={{ color: "#9ca3af" }}>{Math.min(currentPage * itemsPerPage, filtered.length)}</span> of <span style={{ color: "#9ca3af" }}>{filtered.length}</span> clients
+          </div>
+          {totalPages > 1 && (
+            <div style={{ display: "flex", gap: 6 }}>
+              <button
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                style={{ padding: "6px 12px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.02)", color: currentPage === 1 ? "#374151" : "#9ca3af", fontSize: 12, cursor: currentPage === 1 ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: 4 }}
+              >
+                <ChevronLeft size={14} /> Previous
+              </button>
+              {[...Array(totalPages)].map((_, i) => {
+                const p = i + 1;
+                if (totalPages > 5 && Math.abs(p - currentPage) > 1 && p !== 1 && p !== totalPages) {
+                  if (Math.abs(p - currentPage) === 2) return <span key={p} style={{ color: "#374151", padding: "0 4px" }}>...</span>;
+                  return null;
+                }
+                return (
+                  <button
+                    key={p}
+                    onClick={() => setCurrentPage(p)}
+                    style={{ width: 32, height: 32, borderRadius: 8, border: "1px solid", borderColor: currentPage === p ? "rgba(78,205,196,0.3)" : "rgba(255,255,255,0.06)", background: currentPage === p ? "rgba(78,205,196,0.15)" : "rgba(255,255,255,0.02)", color: currentPage === p ? "#4ecdc4" : "#9ca3af", fontSize: 12, fontWeight: 600, cursor: "pointer" }}
+                  >
+                    {p}
+                  </button>
+                );
+              })}
+              <button
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                style={{ padding: "6px 12px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.02)", color: currentPage === totalPages ? "#374151" : "#9ca3af", fontSize: 12, cursor: currentPage === totalPages ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: 4 }}
+              >
+                Next <ChevronRight size={14} />
+              </button>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };
@@ -589,33 +845,90 @@ const PricingPage = ({ plans, setPlans, toast, supabase }) => {
   );
 };
 
-const AnalyticsPage = ({ users }) => (
-  <div>
-    <h1 style={{ fontSize: 24, fontWeight: 800, color: "#fff", margin: "0 0 24px" }}>Analytics</h1>
-    <div style={{ display: "flex", gap: 16, marginBottom: 24, flexWrap: "wrap" }}>
-      <StatCard icon={TrendingUp} label="Conversion Rate" value="34.2%" change="+5.1%" positive sub="Free to Paid" />
-      <StatCard icon={Clock} label="Avg Delivery Time" value="1.8 hrs" change="-12%" positive sub="Target: 2 hrs" />
-      <StatCard icon={Star} label="Client Satisfaction" value="4.9/5" change="+0.1" positive sub="Based on 86 reviews" />
-      <StatCard icon={RefreshCw} label="Revision Rate" value="18%" change="-3%" positive sub="Down from 21%" />
-    </div>
-    <div style={{ display: "flex", gap: 16, marginBottom: 24, flexWrap: "wrap" }}>
-      <div style={{ flex: 1, minWidth: 400, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 16, padding: 22 }}>
-        <h3 style={{ fontSize: 14, fontWeight: 700, color: "#fff", margin: "0 0 18px" }}>Orders vs Revenue</h3>
-        <ResponsiveContainer width="100%" height={260}><LineChart data={revenueData}><CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" /><XAxis dataKey="month" tick={{ fill: "#6b7280", fontSize: 11 }} axisLine={false} tickLine={false} /><YAxis yAxisId="left" tick={{ fill: "#6b7280", fontSize: 11 }} axisLine={false} tickLine={false} /><YAxis yAxisId="right" orientation="right" tick={{ fill: "#6b7280", fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={v => `$${v / 1000}k`} /><Tooltip contentStyle={{ background: "#1a1a1a", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 10, fontSize: 12, color: "#fff" }} /><Legend wrapperStyle={{ fontSize: 11, color: "#6b7280" }} /><Line yAxisId="left" type="monotone" dataKey="orders" stroke="#60a5fa" strokeWidth={2} dot={{ r: 3 }} /><Line yAxisId="right" type="monotone" dataKey="revenue" stroke="#2ab7a9" strokeWidth={2} dot={{ r: 3 }} /></LineChart></ResponsiveContainer>
+const AnalyticsPage = ({ users, orders }) => {
+  const monthlyData = orders.reduce((acc, o) => {
+    const d = new Date(o.created_at);
+    const m = d.toLocaleString('default', { month: 'short' });
+    if (!acc[m]) acc[m] = { month: m, revenue: 0, orders: 0, sortKey: d.getMonth() };
+    acc[m].revenue += (o.revenue || 0);
+    acc[m].orders += 1;
+    return acc;
+  }, {});
+  const dynAnalyticsData = Object.values(monthlyData).sort((a, b) => a.sortKey - b.sortKey);
+
+  // REALTIME PERFORMANCE METRICS CALCULATIONS
+  const now = new Date();
+  const currentMonth = now.getMonth();
+  const currentYear = now.getFullYear();
+
+  const imagesThisMonth = orders
+    .filter(o => {
+      const d = new Date(o.created_at);
+      return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+    })
+    .reduce((acc, o) => acc + (o.images_count || 0), 0);
+
+  const deliveredOrders = orders.filter(o => o.status === 'delivered' || o.status === 'completed');
+  const onTimeDelivery = orders.length ? (deliveredOrders.length / orders.length) * 100 : 0;
+  
+  const revisionOrders = orders.filter(o => o.status === 'revision');
+  const firstTimeApproval = orders.length ? ((orders.length - revisionOrders.length) / orders.length) * 100 : 0;
+  
+  const clientsWithMultipleOrders = users.filter(u => u.orders > 1).length;
+  const clientRetention = users.length ? (clientsWithMultipleOrders / users.length) * 100 : 0;
+  
+  const totalRevenue = orders.reduce((acc, o) => acc + (o.revenue || 0), 0);
+  const avgOrderValue = orders.length ? totalRevenue / orders.length : 0;
+  
+  const pendingOrders = orders.filter(o => o.status === 'pending' || o.status === 'in_progress' || o.status === 'revision').length;
+  const capacityUsed = Math.min(100, (pendingOrders / 20) * 100); // Assuming capacity of 20 active orders
+
+  const revisionRate = orders.length ? (revisionOrders.length / orders.length) * 100 : 0;
+
+  return (
+    <div>
+      <h1 style={{ fontSize: 24, fontWeight: 800, color: "#fff", margin: "0 0 24px" }}>Analytics</h1>
+      <div style={{ display: "flex", gap: 16, marginBottom: 24, flexWrap: "wrap" }}>
+        <StatCard icon={Clock} label="Avg Delivery Time" value="1.8 hrs" change="-12%" positive sub="Target: 2 hrs" />
+        <StatCard icon={RefreshCw} label="Revision Rate" value={`${revisionRate.toFixed(1)}%`} change={revisionRate > 20 ? "+2%" : "-3%"} positive={revisionRate < 20} sub="Realtime tracking" />
       </div>
-      <div style={{ flex: 1, minWidth: 300, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 16, padding: 22 }}>
-        <h3 style={{ fontSize: 14, fontWeight: 700, color: "#fff", margin: "0 0 18px" }}>Top Clients by Revenue</h3>
-        {[...users].sort((a, b) => b.spent - a.spent).slice(0, 6).map((u, i) => <div key={u.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderBottom: i < 5 ? "1px solid rgba(255,255,255,0.03)" : "none" }}><span style={{ fontSize: 11, color: "#4b5563", minWidth: 18 }}>#{i + 1}</span><div style={{ width: 28, height: 28, borderRadius: 7, background: `linear-gradient(135deg,${tierColors[u.tier]},${tierColors[u.tier]}88)`, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700, fontSize: 11 }}>{u.name.charAt(0)}</div><div style={{ flex: 1 }}><div style={{ fontSize: 12, color: "#e5e7eb", fontWeight: 500 }}>{u.name}</div><div style={{ fontSize: 10, color: "#4b5563" }}>{u.orders} orders</div></div><span style={{ fontSize: 13, color: "#34d399", fontWeight: 700 }}>${u.spent.toLocaleString()}</span></div>)}
+      <div style={{ display: "flex", gap: 16, marginBottom: 24, flexWrap: "wrap" }}>
+        <div style={{ flex: 1, minWidth: 400, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 16, padding: 22 }}>
+          <h3 style={{ fontSize: 14, fontWeight: 700, color: "#fff", margin: "0 0 18px" }}>Orders vs Revenue</h3>
+          <ResponsiveContainer width="100%" height={260}>
+            <LineChart data={dynAnalyticsData.length ? dynAnalyticsData : [{ month: "N/A", orders: 0, revenue: 0 }]}>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
+              <XAxis dataKey="month" tick={{ fill: "#6b7280", fontSize: 11 }} axisLine={false} tickLine={false} />
+              <YAxis yAxisId="left" tick={{ fill: "#6b7280", fontSize: 11 }} axisLine={false} tickLine={false} />
+              <YAxis yAxisId="right" orientation="right" tick={{ fill: "#6b7280", fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={v => `$${v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v}`} />
+              <Tooltip contentStyle={{ background: "#1a1a1a", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 10, fontSize: 12, color: "#fff" }} />
+              <Legend wrapperStyle={{ fontSize: 11, color: "#6b7280" }} />
+              <Line yAxisId="left" type="monotone" dataKey="orders" stroke="#60a5fa" strokeWidth={2} dot={{ r: 3 }} />
+              <Line yAxisId="right" type="monotone" dataKey="revenue" stroke="#2ab7a9" strokeWidth={2} dot={{ r: 3 }} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+        <div style={{ flex: 1, minWidth: 300, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 16, padding: 22 }}>
+          <h3 style={{ fontSize: 14, fontWeight: 700, color: "#fff", margin: "0 0 18px" }}>Top Clients by Revenue</h3>
+          {[...users].sort((a, b) => (b.spent || 0) - (a.spent || 0)).slice(0, 6).map((u, i) => <div key={u.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderBottom: i < 5 ? "1px solid rgba(255,255,255,0.03)" : "none" }}><span style={{ fontSize: 11, color: "#4b5563", minWidth: 18 }}>#{i + 1}</span><div style={{ width: 28, height: 28, borderRadius: 7, background: `linear-gradient(135deg,${tierColors[u.tier || 'standard']},${tierColors[u.tier || 'standard']}88)`, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700, fontSize: 11 }}>{(u.name || "?").charAt(0)}</div><div style={{ flex: 1 }}><div style={{ fontSize: 12, color: "#e5e7eb", fontWeight: 500 }}>{u.name}</div><div style={{ fontSize: 10, color: "#4b5563" }}>{u.orders} orders</div></div><span style={{ fontSize: 13, color: "#34d399", fontWeight: 700 }}>${(u.spent || 0).toLocaleString()}</span></div>)}
+        </div>
+      </div>
+      <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 16, padding: 22 }}>
+        <h3 style={{ fontSize: 14, fontWeight: 700, color: "#fff", margin: "0 0 18px" }}>Performance Metrics (Realtime)</h3>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 16 }}>
+          {[
+            { label: "Images This Month", value: imagesThisMonth.toString(), bar: Math.min(100, (imagesThisMonth / 1000) * 100) },
+            { label: "On-Time Delivery", value: `${onTimeDelivery.toFixed(1)}%`, bar: onTimeDelivery },
+            { label: "First-Time Approval", value: `${firstTimeApproval.toFixed(1)}%`, bar: firstTimeApproval },
+            { label: "Client Retention", value: `${clientRetention.toFixed(1)}%`, bar: clientRetention },
+            { label: "Avg Order Value", value: `$${avgOrderValue.toFixed(2)}`, bar: Math.min(100, (avgOrderValue / 150) * 100) },
+            { label: "Capacity Used", value: `${capacityUsed.toFixed(0)}%`, bar: capacityUsed }
+          ].map((m, i) => <div key={i}><div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}><span style={{ fontSize: 12, color: "#9ca3af" }}>{m.label}</span><span style={{ fontSize: 12, color: "#fff", fontWeight: 600 }}>{m.value}</span></div><div style={{ height: 6, borderRadius: 3, background: "rgba(255,255,255,0.06)", overflow: "hidden" }}><div style={{ width: `${m.bar}%`, height: "100%", borderRadius: 3, background: m.bar > 90 ? "#34d399" : m.bar > 70 ? "linear-gradient(90deg,#4ecdc4,#2ab7a9)" : "#60a5fa" }} /></div></div>)}
+        </div>
       </div>
     </div>
-    <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 16, padding: 22 }}>
-      <h3 style={{ fontSize: 14, fontWeight: 700, color: "#fff", margin: "0 0 18px" }}>Performance Metrics</h3>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 16 }}>
-        {[{ label: "Images This Month", value: "842", bar: 84 }, { label: "On-Time Delivery", value: "96.2%", bar: 96 }, { label: "First-Time Approval", value: "82%", bar: 82 }, { label: "Client Retention", value: "91%", bar: 91 }, { label: "Avg Order Value", value: "$94.90", bar: 63 }, { label: "Capacity Used", value: "72%", bar: 72 }].map((m, i) => <div key={i}><div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}><span style={{ fontSize: 12, color: "#9ca3af" }}>{m.label}</span><span style={{ fontSize: 12, color: "#fff", fontWeight: 600 }}>{m.value}</span></div><div style={{ height: 6, borderRadius: 3, background: "rgba(255,255,255,0.06)", overflow: "hidden" }}><div style={{ width: `${m.bar}%`, height: "100%", borderRadius: 3, background: m.bar > 90 ? "#34d399" : m.bar > 70 ? "linear-gradient(90deg,#4ecdc4,#2ab7a9)" : "#60a5fa" }} /></div></div>)}
-      </div>
-    </div>
-  </div>
-);
+  );
+};
 
 const SettingsPage = ({ toast, studioInfo, setStudioInfo, supabase, users, setUsers, adminUser, setAdminUser }) => {
   const [openSection, setOpenSection] = useState("profile");
@@ -637,11 +950,6 @@ const SettingsPage = ({ toast, studioInfo, setStudioInfo, supabase, users, setUs
     }
   }, [adminUser]);
 
-  const [notifOrders, setNotifOrders] = useState(true);
-  const [notifRevisions, setNotifRevisions] = useState(true);
-  const [notifPayments, setNotifPayments] = useState(true);
-  const [slaTarget, setSlaTarget] = useState("2");
-  const [webhookUrl, setWebhookUrl] = useState("");
   const [saving, setSaving] = useState(false);
 
   const saveAdminProfile = async () => {
@@ -755,11 +1063,6 @@ const SettingsPage = ({ toast, studioInfo, setStudioInfo, supabase, users, setUs
     }
   };
 
-  const Toggle = ({ checked, onChange }) => (
-    <div onClick={() => onChange(!checked)} style={{ width: 36, height: 20, borderRadius: 10, background: checked ? "#4ecdc4" : "rgba(255,255,255,0.1)", padding: 2, cursor: "pointer", transition: "background 0.2s" }}>
-      <div style={{ width: 16, height: 16, borderRadius: "50%", background: "#fff", transform: checked ? "translateX(16px)" : "translateX(0)", transition: "transform 0.2s" }} />
-    </div>
-  );
 
   const sections = [
     {
@@ -827,52 +1130,6 @@ const SettingsPage = ({ toast, studioInfo, setStudioInfo, supabase, users, setUs
         </div>
       )
     },
-    {
-      id: "notifications", title: "Notifications", desc: "Email alerts for orders, revisions, and payments", icon: Bell, content: (
-        <div style={{ padding: "16px 0", display: "flex", flexDirection: "column", gap: 14 }}>
-          {[["New order received", notifOrders, setNotifOrders], ["Revision requested", notifRevisions, setNotifRevisions], ["Payment received", notifPayments, setNotifPayments]].map(([label, val, setter], i) => (
-            <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <span style={{ fontSize: 13, color: "#d1d5db" }}>{label}</span>
-              <Toggle checked={val} onChange={setter} />
-            </div>
-          ))}
-          <button onClick={() => toast("Notification preferences saved")} style={{ marginTop: 8, padding: "8px 18px", borderRadius: 8, border: "none", background: "linear-gradient(135deg,#4ecdc4,#2ab7a9)", color: "#fff", fontSize: 12, fontWeight: 600, cursor: "pointer", alignSelf: "flex-start" }}>Save</button>
-        </div>
-      )
-    },
-    {
-      id: "billing", title: "Payment & Billing", desc: "Stripe integration, invoices, and payout settings", icon: CreditCard, content: (
-        <div style={{ padding: "16px 0" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 16px", borderRadius: 10, background: "rgba(78,205,196,0.06)", border: "1px solid rgba(78,205,196,0.15)", marginBottom: 14 }}>
-            <Shield size={16} color="#4ecdc4" />
-            <div style={{ flex: 1 }}><div style={{ fontSize: 13, color: "#e5e7eb", fontWeight: 500 }}>Stripe Connected</div><div style={{ fontSize: 11, color: "#4b5563" }}>acct_1234...xyz</div></div>
-            <span style={{ fontSize: 11, color: "#34d399" }}>Active</span>
-          </div>
-          <button onClick={() => toast("Opening Stripe dashboard...", "info")} style={{ padding: "8px 16px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.08)", background: "transparent", color: "#9ca3af", fontSize: 12, cursor: "pointer" }}>Manage in Stripe</button>
-        </div>
-      )
-    },
-    {
-      id: "delivery", title: "Delivery Settings", desc: "SLA targets, auto-notifications, file formats", icon: Package, content: (
-        <div style={{ padding: "16px 0" }}>
-          <InputField label="SLA Target (hours)" value={slaTarget} onChange={setSlaTarget} type="number" />
-          <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 14 }}>Default file formats: <span style={{ color: "#e5e7eb" }}>PNG, JPG (High-Res)</span></div>
-          <button onClick={() => toast("Delivery settings saved")} style={{ padding: "8px 18px", borderRadius: 8, border: "none", background: "linear-gradient(135deg,#4ecdc4,#2ab7a9)", color: "#fff", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>Save</button>
-        </div>
-      )
-    },
-    {
-      id: "api", title: "API & Integrations", desc: "Webhook URLs, Zapier, and third-party connections", icon: Webhook, content: (
-        <div style={{ padding: "16px 0" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", borderRadius: 10, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", marginBottom: 14 }}>
-            <Key size={14} color="#6b7280" /><span style={{ fontSize: 12, color: "#6b7280" }}>API Key:</span><code style={{ fontSize: 12, color: "#7dd8d0", background: "rgba(78,205,196,0.08)", padding: "2px 8px", borderRadius: 4, flex: 1 }}>pm_live_sk_...7x9z</code>
-            <button onClick={() => toast("API key copied to clipboard")} style={{ background: "none", border: "none", color: "#4ecdc4", fontSize: 11, cursor: "pointer" }}>Copy</button>
-          </div>
-          <InputField label="Webhook URL" value={webhookUrl} onChange={setWebhookUrl} placeholder="https://your-app.com/webhooks/tyes" />
-          <button onClick={() => toast(webhookUrl ? "Webhook URL saved" : "Please enter a webhook URL", webhookUrl ? "success" : "warning")} style={{ padding: "8px 18px", borderRadius: 8, border: "none", background: "linear-gradient(135deg,#4ecdc4,#2ab7a9)", color: "#fff", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>Save</button>
-        </div>
-      )
-    }
   ].filter(s => s.id !== "team" || adminUser?.user_metadata?.role === "superAdmin");
 
   return (
@@ -947,13 +1204,24 @@ export default function TyesAdmin() {
         .select('*')
         .order('created_at', { descending: true });
       if (ordersData) {
-        const mappedOrders = ordersData.map(o => ({
-          ...o,
-          customer: o.customer_name || o.customer_email,
-          email: o.customer_email,
-          images: o.images_count,
-          date: new Date(o.created_at).toISOString().split('T')[0]
-        }));
+        const mappedOrders = ordersData.map(o => {
+          let items = o.items || [];
+          if (items.length === 0 && o.attachments && o.attachments.photos) {
+            items = o.attachments.photos.map((url, idx) => ({
+              name: `Product Photo ${idx + 1}`,
+              mainImage: url,
+              status: o.status || "pending"
+            }));
+          }
+          return {
+            ...o,
+            customer: o.customer_name || o.customer_email,
+            email: o.customer_email,
+            images: o.images_count,
+            date: new Date(o.created_at).toISOString().split('T')[0],
+            items: items
+          };
+        });
         setOrders(mappedOrders);
       }
 
@@ -973,7 +1241,7 @@ export default function TyesAdmin() {
         }));
         setUsers(mappedUsers);
       } else {
-        setUsers([]); // Clear mock data if table exists but is empty
+        setUsers([]);
       }
     } catch (err) {
       console.error("Fetch error:", err);
@@ -987,7 +1255,7 @@ export default function TyesAdmin() {
     fetchDashboardData();
 
     // REAL-TIME SYNC: Listen for profile changes (Team members & Clients)
-    const channel = supabase
+    const profileChannel = supabase
       .channel('profiles-realtime')
       .on('postgres_changes', { event: '*', table: 'profiles' }, (payload) => {
         const { eventType, new: newRow, old: oldRow } = payload;
@@ -1021,8 +1289,47 @@ export default function TyesAdmin() {
       })
       .subscribe();
 
+    // REAL-TIME SYNC: Listen for order changes
+    const orderChannel = supabase
+      .channel('orders-realtime')
+      .on('postgres_changes', { event: '*', table: 'orders' }, (payload) => {
+        const { eventType, new: newRow, old: oldRow } = payload;
+
+        setOrders(currentOrders => {
+          if (eventType === 'INSERT') {
+            const newOrder = {
+              ...newRow,
+              customer: newRow.customer_name || newRow.customer_email,
+              email: newRow.customer_email,
+              images: newRow.images_count,
+              date: new Date(newRow.created_at).toISOString().split('T')[0]
+            };
+            return [newOrder, ...currentOrders];
+          }
+
+          if (eventType === 'UPDATE') {
+            return currentOrders.map(o => o.id === newRow.id ? {
+              ...o,
+              ...newRow,
+              customer: newRow.customer_name || newRow.customer_email,
+              email: newRow.customer_email,
+              images: newRow.images_count,
+              date: new Date(newRow.created_at).toISOString().split('T')[0]
+            } : o);
+          }
+
+          if (eventType === 'DELETE') {
+            return currentOrders.filter(o => o.id !== oldRow.id);
+          }
+
+          return currentOrders;
+        });
+      })
+      .subscribe();
+
     return () => {
-      supabase.removeChannel(channel);
+      supabase.removeChannel(profileChannel);
+      supabase.removeChannel(orderChannel);
     };
   }, []);
 
@@ -1047,7 +1354,7 @@ export default function TyesAdmin() {
       case "dashboard": return <DashboardPage toast={addToast} goTo={setPage} orders={orders} users={users} />;
       case "orders": return <OrdersPage orders={orders} setOrders={setOrders} toast={addToast} goTo={setPage} supabase={supabase} />;
       case "clients": return <UsersPage users={users} setUsers={setUsers} toast={addToast} supabase={supabase} />;
-      case "analytics": return <AnalyticsPage users={users} />;
+      case "analytics": return <AnalyticsPage users={users} orders={orders} />;
       case "pricing": return <PricingPage plans={plans} setPlans={setPlans} toast={addToast} supabase={supabase} />;
       case "settings": return <SettingsPage toast={addToast} studioInfo={studioInfo} setStudioInfo={setStudioInfo} supabase={supabase} users={users} adminUser={adminUser} setAdminUser={setAdminUser} />;
       default: return <DashboardPage toast={addToast} goTo={setPage} />;
@@ -1102,14 +1409,18 @@ export default function TyesAdmin() {
               </button>
               {notifOpen && (
                 <div style={{ position: "absolute", right: 0, top: "100%", marginTop: 8, width: 300, background: "#1a1a1a", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 12, padding: 8, zIndex: 100, boxShadow: "0 12px 40px rgba(0,0,0,0.5)" }}>
-                  <div style={{ padding: "8px 12px", fontSize: 13, fontWeight: 700, color: "#fff", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>Notifications</div>
-                  {activityLog.slice(0, 4).map((a, i) => (
-                    <div key={i} onClick={() => { if (a.type === "order") setPage("orders"); setNotifOpen(false); }} style={{ display: "flex", gap: 8, padding: "10px 12px", cursor: "pointer", borderRadius: 8 }} onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.03)"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                      <div style={{ width: 6, height: 6, borderRadius: "50%", marginTop: 5, background: a.type === "order" ? "#60a5fa" : a.type === "revision" ? "#fbbf24" : a.type === "complete" ? "#34d399" : "#4ecdc4" }} />
-                      <div><div style={{ fontSize: 12, color: "#d1d5db" }}>{a.action}</div><div style={{ fontSize: 11, color: "#4b5563" }}>{a.detail}</div><div style={{ fontSize: 10, color: "#374151" }}>{a.time}</div></div>
+                  <div style={{ padding: "8px 12px", fontSize: 13, fontWeight: 700, color: "#fff", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>Recent Notifications</div>
+                  {orders.length ? orders.slice(0, 5).map((o, i) => (
+                    <div key={i} onClick={() => { setPage("orders"); setNotifOpen(false); }} style={{ display: "flex", gap: 8, padding: "10px 12px", cursor: "pointer", borderRadius: 8 }} onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.03)"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                      <div style={{ width: 6, height: 6, borderRadius: "50%", marginTop: 5, background: statusConfig[o.status || 'pending'].color }} />
+                      <div>
+                        <div style={{ fontSize: 12, color: "#d1d5db" }}>{statusConfig[o.status].label}: {o.id}</div>
+                        <div style={{ fontSize: 11, color: "#4b5563" }}>{o.customer} · {o.plan}</div>
+                        <div style={{ fontSize: 10, color: "#374151" }}>{o.date}</div>
+                      </div>
                     </div>
-                  ))}
-                  <button onClick={() => { addToast("All notifications marked as read"); setNotifOpen(false); }} style={{ width: "100%", padding: "8px", border: "none", background: "transparent", color: "#4ecdc4", fontSize: 11, cursor: "pointer", borderTop: "1px solid rgba(255,255,255,0.06)", marginTop: 4 }}>Mark all as read</button>
+                  )) : <div style={{ padding: 20, textAlign: "center", color: "#4b5563", fontSize: 12 }}>No notifications.</div>}
+                  <button onClick={() => { setNotifOpen(false); setPage("orders"); }} style={{ width: "100%", padding: "8px", border: "none", background: "transparent", color: "#4ecdc4", fontSize: 11, cursor: "pointer", borderTop: "1px solid rgba(255,255,255,0.06)", marginTop: 4 }}>View all orders</button>
                 </div>
               )}
             </div>

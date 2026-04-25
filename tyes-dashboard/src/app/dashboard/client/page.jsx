@@ -101,7 +101,7 @@ const navPages = [
   { id: "overview", label: "Overview", icon: Home },
   { id: "orders", label: "My Orders", icon: Package },
   { id: "new-order", label: "New Order", icon: Plus },
-  { id: "messages", label: "Messages", icon: MessageSquare, badge: "1" },
+  // { id: "messages", label: "Messages", icon: MessageSquare, badge: "1" },
   { id: "invoices", label: "Invoices", icon: FileText },
   { id: "account", label: "Account", icon: User },
 ];
@@ -139,16 +139,27 @@ export default function TyesClient() {
         .single();
 
       if (profile) {
+        const fullName = `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || profile.email;
         setClientInfo({
-          name: `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || profile.email,
+          name: fullName,
           email: profile.email,
           tier: profile.tier || "starter",
           joined: new Date(profile.created_at).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
           totalOrders: profile.orders_count || 0,
           totalSpent: profile.total_spent || 0,
-          imagesDelivered: 0, // Would need more logic if tracking this separately
+          imagesDelivered: 0,
           freeTestUsed: true,
         });
+        setCompanyName(fullName);
+        setCompanyEmail(profile.email);
+
+        // Load preferences from user_metadata or fallback to profile
+        const metadataPrefs = authUser.user_metadata?.preferences;
+        if (metadataPrefs) {
+          setPrefs(prev => ({ ...prev, ...metadataPrefs }));
+        } else if (profile.preferences) {
+          setPrefs(prev => ({ ...prev, ...profile.preferences }));
+        }
       }
 
       // 3. Fetch Plans
@@ -376,18 +387,35 @@ export default function TyesClient() {
   const OrdersPage = () => {
     const [expanded, setExpanded] = useState(null);
     const [filter, setFilter] = useState("all");
+    const [currentPage, setCurrentPage] = useState(1);
+    const itemsPerPage = 5;
     const filtered = orders.filter(o => filter === "all" || o.status === filter);
+    const totalPages = Math.ceil(filtered.length / itemsPerPage);
+    const paginatedOrders = filtered.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
-    const handleDownloadAll = (orderId) => {
-      addToast(`Downloading all images for ${orderId}...`, "info");
+    const handleDownloadAll = (order) => {
+      const links = order.items.filter(i => i.finishImage).map(i => i.finishImage);
+      if (links.length === 0) {
+        addToast("No images delivered yet", "info");
+        return;
+      }
+      addToast(`Preparing ${links.length} images for download...`, "info");
+      links.forEach((url, i) => {
+        setTimeout(() => window.open(url, '_blank'), i * 200);
+      });
     };
 
-    const handleDownloadItem = (itemName) => {
-      addToast(`Downloading ${itemName}...`, "info");
+    const handleDownloadItem = (name, url) => {
+      if (!url) {
+        addToast("Download link not available", "error");
+        return;
+      }
+      addToast(`Downloading ${name}...`, "info");
+      window.open(url, '_blank');
     };
 
-    const handleRequestRevision = (order) => {
-      setShowRevisionModal(order);
+    const handleRequestRevision = (order, itemIndex = null) => {
+      setShowRevisionModal({ order, itemIndex });
     };
 
     return (
@@ -398,13 +426,13 @@ export default function TyesClient() {
         </div>
         <div style={{ display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap" }}>
           {[{ key: "all", label: "All" }, { key: "in_progress", label: "In Progress" }, { key: "revision", label: "Revision" }, { key: "delivered", label: "Delivered" }].map(f => (
-            <button key={f.key} onClick={() => setFilter(f.key)} style={{ padding: "6px 14px", borderRadius: 20, border: "1px solid", borderColor: filter === f.key ? "rgba(78,205,196,0.5)" : "rgba(255,255,255,0.06)", background: filter === f.key ? "rgba(78,205,196,0.15)" : "transparent", color: filter === f.key ? "#4ecdc4" : "#6b7280", fontSize: 12, fontWeight: 500, cursor: "pointer" }}>
+            <button key={f.key} onClick={() => { setFilter(f.key); setCurrentPage(1); }} style={{ padding: "6px 14px", borderRadius: 20, border: "1px solid", borderColor: filter === f.key ? "rgba(78,205,196,0.5)" : "rgba(255,255,255,0.06)", background: filter === f.key ? "rgba(78,205,196,0.15)" : "transparent", color: filter === f.key ? "#4ecdc4" : "#6b7280", fontSize: 12, fontWeight: 500, cursor: "pointer" }}>
               {f.label} {f.key !== "all" && `(${orders.filter(o => o.status === f.key).length})`}
             </button>
           ))}
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          {filtered.map(o => (
+          {paginatedOrders.map(o => (
             <div key={o.id} style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 16, overflow: "hidden", transition: "all 0.2s" }}>
               <div style={{ display: "flex", alignItems: "center", padding: "16px 20px", cursor: "pointer", gap: 16 }} onClick={() => setExpanded(expanded === o.id ? null : o.id)}>
                 <div style={{ flex: 1 }}>
@@ -416,7 +444,7 @@ export default function TyesClient() {
                   <span style={{ fontSize: 12, color: "#6b7280" }}>{o.plan} · {o.images} images · {o.date}</span>
                 </div>
                 <div style={{ textAlign: "right", marginRight: 12 }}>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: o.revenue > 0 ? "#34d399" : "#6b7280" }}>{o.revenue > 0 ? `$${o.revenue}` : "Free"}</div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: (o.revenue || 0) > 0 ? "#34d399" : "#6b7280" }}>{(o.revenue || 0) > 0 ? `$${o.revenue}` : "Free"}</div>
                   <div style={{ fontSize: 11, color: "#4b5563" }}>Rev {o.revisions}/{o.maxRevisions}</div>
                 </div>
                 <div style={{ width: 60 }}>
@@ -429,7 +457,7 @@ export default function TyesClient() {
               </div>
               {expanded === o.id && (
                 <div style={{ borderTop: "1px solid rgba(255,255,255,0.04)", padding: "16px 20px" }}>
-                  {o.items.length > 0 ? (
+                  {o.items && o.items.length > 0 ? (
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 8 }}>
                       {o.items.map((item, i) => (
                         <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", borderRadius: 10, background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.04)" }}>
@@ -440,8 +468,12 @@ export default function TyesClient() {
                             <div style={{ fontSize: 12, color: "#e5e7eb", fontWeight: 500 }}>{item.name}</div>
                           </div>
                           <StatusBadge status={item.status} />
-                          {item.status === "delivered" && (
-                            <button onClick={(e) => { e.stopPropagation(); handleDownloadItem(item.name); }} style={{ background: "none", border: "none", color: "#4ecdc4", cursor: "pointer", padding: 2 }}><Download size={13} /></button>
+                          {item.status === "delivered" && item.finishImage && (
+                            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                              <div onClick={() => window.open(item.finishImage, '_blank')} style={{ width: 30, height: 30, borderRadius: 6, background: `url(${item.finishImage}) center/cover`, border: "1px solid rgba(16,185,129,0.3)", cursor: "pointer" }} />
+                              <button onClick={(e) => { e.stopPropagation(); handleDownloadItem(item.name, item.finishImage); }} style={{ background: "none", border: "none", color: "#4ecdc4", cursor: "pointer", padding: 2 }} title="Download"><Download size={13} /></button>
+                              <button onClick={(e) => { e.stopPropagation(); handleRequestRevision(o, i); }} style={{ background: "none", border: "none", color: "#fbbf24", cursor: "pointer", padding: 2 }} title="Request Revision"><RefreshCw size={13} /></button>
+                            </div>
                           )}
                           {item.status === "revision" && (
                             <button onClick={(e) => { e.stopPropagation(); setPage("messages"); }} style={{ background: "none", border: "none", color: "#fbbf24", cursor: "pointer", padding: 2 }}><MessageSquare size={13} /></button>
@@ -455,7 +487,7 @@ export default function TyesClient() {
                   <div style={{ display: "flex", gap: 8, marginTop: 14, justifyContent: "flex-end" }}>
                     <button onClick={() => setShowOrderDetailModal(o)} style={{ padding: "7px 16px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.08)", background: "transparent", color: "#9ca3af", fontSize: 12, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}><Eye size={12} /> View Details</button>
                     {o.status === "delivered" && (
-                      <button onClick={() => handleDownloadAll(o.id)} style={{ padding: "7px 16px", borderRadius: 8, border: "none", background: "linear-gradient(135deg,#4ecdc4,#2ab7a9)", color: "#fff", fontSize: 12, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}><Download size={12} /> Download All</button>
+                      <button onClick={() => handleDownloadAll(o)} style={{ padding: "7px 16px", borderRadius: 8, border: "none", background: "linear-gradient(135deg,#4ecdc4,#2ab7a9)", color: "#fff", fontSize: 12, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}><Download size={12} /> Download All</button>
                     )}
                     {o.status === "revision" && (
                       <button onClick={() => handleRequestRevision(o)} style={{ padding: "7px 16px", borderRadius: 8, border: "1px solid rgba(251,191,36,0.3)", background: "rgba(251,191,36,0.1)", color: "#fbbf24", fontSize: 12, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}><RefreshCw size={12} /> Request Revision</button>
@@ -465,7 +497,50 @@ export default function TyesClient() {
               )}
             </div>
           ))}
+          {filtered.length === 0 && <div style={{ padding: 40, textAlign: "center", color: "#4b5563", fontSize: 13 }}>No orders found.</div>}
         </div>
+
+        {filtered.length > 0 && (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 24, padding: "0 4px" }}>
+            <div style={{ fontSize: 12, color: "#4b5563" }}>
+              Showing <span style={{ color: "#9ca3af" }}>{(currentPage - 1) * itemsPerPage + 1}</span> to <span style={{ color: "#9ca3af" }}>{Math.min(currentPage * itemsPerPage, filtered.length)}</span> of <span style={{ color: "#9ca3af" }}>{filtered.length}</span> orders
+            </div>
+            {totalPages > 1 && (
+              <div style={{ display: "flex", gap: 6 }}>
+                <button
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  style={{ padding: "6px 12px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.02)", color: currentPage === 1 ? "#374151" : "#9ca3af", fontSize: 12, cursor: currentPage === 1 ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: 4 }}
+                >
+                  <ChevronLeft size={14} />
+                </button>
+                {[...Array(totalPages)].map((_, i) => {
+                  const p = i + 1;
+                  if (totalPages > 5 && Math.abs(p - currentPage) > 1 && p !== 1 && p !== totalPages) {
+                    if (Math.abs(p - currentPage) === 2) return <span key={p} style={{ color: "#374151", padding: "0 4px" }}>...</span>;
+                    return null;
+                  }
+                  return (
+                    <button
+                      key={p}
+                      onClick={() => setCurrentPage(p)}
+                      style={{ width: 32, height: 32, borderRadius: 8, border: "1px solid", borderColor: currentPage === p ? "rgba(78,205,196,0.3)" : "rgba(255,255,255,0.06)", background: currentPage === p ? "rgba(78,205,196,0.15)" : "rgba(255,255,255,0.02)", color: currentPage === p ? "#4ecdc4" : "#9ca3af", fontSize: 12, fontWeight: 600, cursor: "pointer" }}
+                    >
+                      {p}
+                    </button>
+                  );
+                })}
+                <button
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                  style={{ padding: "6px 12px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.02)", color: currentPage === totalPages ? "#374151" : "#9ca3af", fontSize: 12, cursor: currentPage === totalPages ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: 4 }}
+                >
+                  <ChevronRight size={14} />
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     );
   };
@@ -475,7 +550,7 @@ export default function TyesClient() {
   // ══════════════════════════════════════
   const NewOrderPage = () => {
     const [step, setStep] = useState(1);
-    const [plan, setPlan] = useState(null);
+    const [plan, setPlan] = useState("");
     const [projectTitle, setProjectTitle] = useState("");
     const [briefDesc, setBriefDesc] = useState("");
     const [selectedStyles, setSelectedStyles] = useState([]);
@@ -485,41 +560,49 @@ export default function TyesClient() {
 
     const plans = pricingPlans;
 
-    const toggleStyle = (s) => setSelectedStyles(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]);
+    const toggleStyle = (style) => {
+      setSelectedStyles(prev => prev.includes(style) ? prev.filter(s => s !== style) : [...prev, style]);
+    };
 
     const removeFile = (type, index) => {
       if (type === 'photo') setProductPhotos(prev => prev.filter((_, i) => i !== index));
       else setDocumentFiles(prev => prev.filter((_, i) => i !== index));
     };
 
+    const uploadToCloudinary = async (files) => {
+      const urls = [];
+      for (const file of files) {
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("upload_preset", "tyes_uploads");
+        try {
+          const res = await fetch(`https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/image/upload`, {
+            method: "POST",
+            body: formData,
+          });
+          const data = await res.json();
+          if (data.secure_url) urls.push(data.secure_url);
+        } catch (err) {
+          console.error("Cloudinary error:", err);
+        }
+      }
+      return urls;
+    };
+
     const handleSubmitOrder = async () => {
-      const selectedPlan = plans.find(p => p.id === plan);
-      if (!selectedPlan) return;
+      if (productPhotos.length === 0) {
+        addToast("Please upload at least one product photo", "warning");
+        return;
+      }
 
       setIsSubmitting(true);
-      addToast("Starting order submission...", "info");
-
       try {
-        const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
-        const uploadPreset = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
-
-        const uploadToCloudinary = async (files) => {
-          const urls = [];
-          for (const file of files) {
-            const formData = new FormData();
-            formData.append("file", file);
-            formData.append("upload_preset", uploadPreset);
-            const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/upload`, { method: "POST", body: formData });
-            const data = await res.json();
-            if (data.secure_url) urls.push(data.secure_url);
-          }
-          return urls;
-        };
-
+        const selectedPlan = plans.find(p => p.id === plan);
         let photoUrls = [];
         let docUrls = [];
 
-        if (cloudName && uploadPreset) {
+        // 1. Upload files if Cloudinary is configured
+        if (process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME) {
           if (productPhotos.length > 0) {
             addToast(`Uploading ${productPhotos.length} photos...`, "info");
             photoUrls = await uploadToCloudinary(productPhotos);
@@ -528,19 +611,16 @@ export default function TyesClient() {
             addToast(`Uploading ${documentFiles.length} documents...`, "info");
             docUrls = await uploadToCloudinary(documentFiles);
           }
-        } else {
-          addToast("Cloudinary not configured. Files will not be saved.", "warning");
         }
 
         // 2. Save order to Supabase
         const orderId = `ORD-${Math.floor(100000 + Math.random() * 900000)}`;
         const actualImagesCount = selectedPlan.images || 0;
 
-        // Structured items with mainImage, finishImage, name, and status
         const structuredItems = productPhotos.map((file, index) => ({
           name: file.name,
           mainImage: photoUrls[index] || "",
-          finishImage: "", // Will be filled by admin later
+          finishImage: "",
           status: "pending"
         }));
 
@@ -561,7 +641,7 @@ export default function TyesClient() {
             customer_name: clientInfo.name,
             user_id: user.id,
             attachments: { photos: photoUrls, status: "pending" },
-            documents: docUrls, // Dedicated documents column
+            documents: docUrls,
             items: structuredItems,
             brief_description: briefDesc,
             selected_styles: selectedStyles
@@ -581,142 +661,152 @@ export default function TyesClient() {
     };
 
     return (
-      <div>
-        <h1 style={{ fontSize: 24, fontWeight: 800, color: "#fff", margin: "0 0 8px" }}>New Order</h1>
-        <p style={{ fontSize: 13, color: "#6b7280", margin: "0 0 28px" }}>Fill in your brief and we'll get started right away.</p>
+      <div style={{ width: "100%", display: "flex", justifyContent: "center", paddingBottom: 40 }}>
+        <div style={{ width: "100%", maxWidth: 940 }}>
+          <h1 style={{ fontSize: 24, fontWeight: 800, color: "#fff", margin: "0 0 8px" }}>New Order</h1>
+          <p style={{ fontSize: 13, color: "#6b7280", margin: "0 0 32px" }}>Fill in your brief and we'll get started right away.</p>
 
-        <div style={{ display: "flex", gap: 8, marginBottom: 32 }}>
-          {["Choose Plan", "Upload Brief", "Review & Submit"].map((s, i) => (
-            <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, flex: 1 }}>
-              <div style={{ width: 28, height: 28, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, background: step > i + 1 ? "#34d399" : step === i + 1 ? "linear-gradient(135deg,#4ecdc4,#2ab7a9)" : "rgba(255,255,255,0.06)", color: step >= i + 1 ? "#fff" : "#4b5563" }}>
-                {step > i + 1 ? <Check size={13} /> : i + 1}
-              </div>
-              <span style={{ fontSize: 12, color: step === i + 1 ? "#fff" : "#4b5563", fontWeight: step === i + 1 ? 600 : 400 }}>{s}</span>
-              {i < 2 && <div style={{ flex: 1, height: 1, background: step > i + 1 ? "#34d399" : "rgba(255,255,255,0.06)", margin: "0 8px" }} />}
-            </div>
-          ))}
-        </div>
-
-        {step === 1 && (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 16 }}>
-            {plans.length === 0 ? (
-              <div style={{ gridColumn: "1 / -1", textAlign: "center", padding: "40px", color: "#6b7280" }}>
-                <RefreshCw size={24} className="animate-spin" style={{ margin: "0 auto 12px", opacity: 0.5 }} />
-                <p>Loading plans...</p>
-              </div>
-            ) : (
-              plans.map(p => (
-                <div key={p.id} onClick={() => setPlan(p.id)} style={{ background: plan === p.id ? "rgba(78,205,196,0.06)" : "rgba(255,255,255,0.03)", border: `2px solid ${plan === p.id ? "rgba(78,205,196,0.5)" : "rgba(255,255,255,0.06)"}`, borderRadius: 16, padding: 24, cursor: "pointer", transition: "all 0.2s", position: "relative" }}>
-                  {p.badge && <span style={{ position: "absolute", top: 12, right: 12, background: "rgba(78,205,196,0.15)", color: "#4ecdc4", fontSize: 10, fontWeight: 600, padding: "2px 8px", borderRadius: 10 }}>{p.badge}</span>}
-                  <div style={{ fontSize: 28, fontWeight: 900, color: "#fff", marginBottom: 4 }}>${p.price}</div>
-                  <div style={{ fontSize: 15, fontWeight: 700, color: "#e5e7eb", marginBottom: 4 }}>{p.name}</div>
-                  <div style={{ fontSize: 12, color: "#6b7280" }}>{p.images} image{p.images > 1 ? "s" : ""} · 3 revisions</div>
-                  {plan === p.id && <div style={{ position: "absolute", top: 12, left: 12 }}><Check size={16} color="#4ecdc4" /></div>}
+          <div style={{ display: "flex", gap: 8, marginBottom: 32 }}>
+            {["Choose Plan", "Upload Brief", "Review & Submit"].map((s, i) => (
+              <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, flex: 1 }}>
+                <div style={{ width: 28, height: 28, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, background: step > i + 1 ? "#34d399" : step === i + 1 ? "linear-gradient(135deg,#4ecdc4,#2ab7a9)" : "rgba(255,255,255,0.06)", color: step >= i + 1 ? "#fff" : "#4b5563" }}>
+                  {step > i + 1 ? <Check size={13} /> : i + 1}
                 </div>
-              ))
-            )}
-          </div>
-        )}
-
-        {step === 2 && (
-          <div style={{ maxWidth: 600 }}>
-            <InputField label="Project Title" value={projectTitle} onChange={setProjectTitle} placeholder="e.g. Summer Skincare Launch" />
-            <div style={{ marginBottom: 20 }}>
-              <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#d1d5db", marginBottom: 6 }}>Brief / Mood Description</label>
-              <textarea value={briefDesc} onChange={e => setBriefDesc(e.target.value)} placeholder="Describe the mood, style, angles you want..." rows={4} style={{ width: "100%", padding: "10px 14px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.03)", color: "#fff", fontSize: 13, outline: "none", resize: "vertical", fontFamily: "inherit", boxSizing: "border-box" }} />
-            </div>
-            <div style={{ marginBottom: 20 }}>
-              <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#d1d5db", marginBottom: 6 }}>Style (click to select)</label>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                {["Product Shot", "Editorial", "Lifestyle", "Flat Lay", "Minimal", "Mood Lighting", "Artistic"].map(s => (
-                  <button key={s} onClick={() => toggleStyle(s)} style={{ padding: "6px 14px", borderRadius: 20, border: `1px solid ${selectedStyles.includes(s) ? "rgba(78,205,196,0.5)" : "rgba(255,255,255,0.08)"}`, background: selectedStyles.includes(s) ? "rgba(78,205,196,0.15)" : "rgba(255,255,255,0.03)", color: selectedStyles.includes(s) ? "#4ecdc4" : "#9ca3af", fontSize: 12, cursor: "pointer", transition: "all 0.2s" }}>{s}</button>
-                ))}
-              </div>
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 20 }}>
-              {/* Product Photos */}
-              <div>
-                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#d1d5db", marginBottom: 6 }}>Product Photos</label>
-                <div onClick={() => document.getElementById('photoInput').click()} style={{ border: "2px dashed rgba(255,255,255,0.08)", borderRadius: 12, padding: "20px 12px", textAlign: "center", cursor: "pointer", transition: "all 0.2s", background: "rgba(255,255,255,0.01)" }} onMouseEnter={e => e.currentTarget.style.borderColor = "rgba(78,205,196,0.3)"} onMouseLeave={e => e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)"}>
-                  <input type="file" id="photoInput" multiple accept="image/*" style={{ display: "none" }} onChange={e => {
-                    const selectedPlan = plans.find(p => p.id === plan);
-                    const limit = selectedPlan ? selectedPlan.images : 0;
-                    const newFiles = Array.from(e.target.files);
-                    const totalAfterAddition = productPhotos.length + newFiles.length;
-
-                    if (totalAfterAddition > limit) {
-                      const remainingSlots = limit - productPhotos.length;
-                      if (remainingSlots <= 0) {
-                        addToast(`You have already reached the limit of ${limit} photos for this plan.`, "warning");
-                      } else {
-                        addToast(`You can only add ${remainingSlots} more photo(s). Your current selection exceeds the plan limit.`, "warning");
-                      }
-                      return;
-                    }
-                    setProductPhotos(prev => [...prev, ...newFiles]);
-                  }} />
-                  <Camera size={20} color="#4ecdc4" style={{ marginBottom: 6 }} />
-                  <div style={{ fontSize: 12, color: "#e5e7eb", fontWeight: 600 }}>Add Photos</div>
-                </div>
-                <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 4 }}>
-                  {productPhotos.map((f, i) => (
-                    <div key={i} style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 8px", background: "rgba(255,255,255,0.03)", borderRadius: 6, fontSize: 11 }}>
-                      <Image size={10} color="#6b7280" />
-                      <span style={{ flex: 1, color: "#d1d5db", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{f.name}</span>
-                      <button onClick={() => removeFile('photo', i)} style={{ background: "none", border: "none", color: "#ef4444", cursor: "pointer", padding: 2 }}><X size={12} /></button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Documents */}
-              <div>
-                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#d1d5db", marginBottom: 6 }}>Documents / Briefs</label>
-                <div onClick={() => document.getElementById('docInput').click()} style={{ border: "2px dashed rgba(255,255,255,0.08)", borderRadius: 12, padding: "20px 12px", textAlign: "center", cursor: "pointer", transition: "all 0.2s", background: "rgba(255,255,255,0.01)" }} onMouseEnter={e => e.currentTarget.style.borderColor = "rgba(78,205,196,0.3)"} onMouseLeave={e => e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)"}>
-                  <input type="file" id="docInput" multiple style={{ display: "none" }} onChange={e => setDocumentFiles(prev => [...prev, ...Array.from(e.target.files)])} />
-                  <FileText size={20} color="#4ecdc4" style={{ marginBottom: 6 }} />
-                  <div style={{ fontSize: 12, color: "#e5e7eb", fontWeight: 600 }}>Add Documents</div>
-                </div>
-                <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 4 }}>
-                  {documentFiles.map((f, i) => (
-                    <div key={i} style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 8px", background: "rgba(255,255,255,0.03)", borderRadius: 6, fontSize: 11 }}>
-                      <FileText size={10} color="#6b7280" />
-                      <span style={{ flex: 1, color: "#d1d5db", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{f.name}</span>
-                      <button onClick={() => removeFile('doc', i)} style={{ background: "none", border: "none", color: "#ef4444", cursor: "pointer", padding: 2 }}><X size={12} /></button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {step === 3 && (
-          <div style={{ maxWidth: 500, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 16, padding: 24 }}>
-            <h3 style={{ fontSize: 16, fontWeight: 700, color: "#fff", margin: "0 0 16px" }}>Order Summary</h3>
-            {[
-              { label: "Plan", val: plans.find(p => p.id === plan)?.name || "—" },
-              { label: "Project", val: projectTitle || "Untitled" },
-              { label: "Images", val: plans.find(p => p.id === plan)?.images || 0 },
-              { label: "Style", val: selectedStyles.join(", ") || "Not specified" },
-              { label: "Photos", val: `${productPhotos.length} selected` },
-              { label: "Documents", val: `${documentFiles.length} selected` },
-              { label: "Revisions", val: "3 included" },
-            ].map((r, i) => (
-              <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: "1px solid rgba(255,255,255,0.04)", fontSize: 13 }}>
-                <span style={{ color: "#9ca3af" }}>{r.label}</span><span style={{ color: "#fff", fontWeight: 500 }}>{r.val}</span>
+                <span style={{ fontSize: 12, color: step === i + 1 ? "#fff" : "#4b5563", fontWeight: step === i + 1 ? 600 : 400 }}>{s}</span>
+                {i < 2 && <div style={{ flex: 1, height: 1, background: step > i + 1 ? "#34d399" : "rgba(255,255,255,0.06)", margin: "0 8px" }} />}
               </div>
             ))}
-            <div style={{ display: "flex", justifyContent: "space-between", padding: "12px 0", fontSize: 18 }}>
-              <span style={{ color: "#9ca3af", fontWeight: 600 }}>Total</span><span style={{ color: "#4ecdc4", fontWeight: 800 }}>${plans.find(p => p.id === plan)?.price || 0}</span>
-            </div>
           </div>
-        )}
 
-        <div style={{ display: "flex", gap: 10, marginTop: 28 }}>
-          {step > 1 && <button onClick={() => setStep(step - 1)} style={{ padding: "10px 20px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.08)", background: "transparent", color: "#9ca3af", fontSize: 13, cursor: "pointer" }}>Back</button>}
-          {step < 3 && <button onClick={() => { if (step === 1 && !plan) { addToast("Please select a plan first", "warning"); return; } setStep(step + 1); }} style={{ padding: "10px 20px", borderRadius: 10, border: "none", background: "linear-gradient(135deg,#4ecdc4,#2ab7a9)", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer", opacity: step === 1 && !plan ? 0.4 : 1 }}>Continue</button>}
-          {step === 3 && <button onClick={handleSubmitOrder} disabled={isSubmitting} style={{ padding: "10px 24px", borderRadius: 10, border: "none", background: "linear-gradient(135deg,#4ecdc4,#2ab7a9)", color: "#fff", fontSize: 13, fontWeight: 600, cursor: isSubmitting ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: 6, opacity: isSubmitting ? 0.7 : 1 }}>{isSubmitting ? <RefreshCw size={13} className="animate-spin" /> : <Send size={13} />} {isSubmitting ? "Submitting..." : "Submit Order"}</button>}
+          {step === 1 && (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 16 }}>
+              {plans.length === 0 ? (
+                <div style={{ gridColumn: "1 / -1", textAlign: "center", padding: "40px", color: "#6b7280" }}>
+                  <RefreshCw size={24} className="animate-spin" style={{ margin: "0 auto 12px", opacity: 0.5 }} />
+                  <p>Loading plans...</p>
+                </div>
+              ) : (
+                plans.map(p => (
+                  <div key={p.id} onClick={() => setPlan(p.id)} style={{ background: plan === p.id ? "rgba(78,205,196,0.06)" : "rgba(255,255,255,0.03)", border: `2px solid ${plan === p.id ? "rgba(78,205,196,0.5)" : "rgba(255,255,255,0.06)"}`, borderRadius: 16, padding: 24, cursor: "pointer", transition: "all 0.2s", position: "relative" }}>
+                    {p.badge && <span style={{ position: "absolute", top: 12, right: 12, background: "rgba(78,205,196,0.15)", color: "#4ecdc4", fontSize: 10, fontWeight: 600, padding: "2px 8px", borderRadius: 10 }}>{p.badge}</span>}
+                    <div style={{ fontSize: 28, fontWeight: 900, color: "#fff", marginBottom: 4 }}>${p.price}</div>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: "#e5e7eb", marginBottom: 4 }}>{p.name}</div>
+                    <div style={{ fontSize: 12, color: "#6b7280" }}>{p.images} image{p.images > 1 ? "s" : ""} · 3 revisions</div>
+                    {plan === p.id && <div style={{ position: "absolute", top: 12, left: 12 }}><Check size={16} color="#4ecdc4" /></div>}
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+
+          {step === 2 && (
+            <div style={{ width: "100%" }}>
+              <InputField label="Project Title" value={projectTitle} onChange={setProjectTitle} placeholder="e.g. Summer Skincare Launch" />
+              <div style={{ marginBottom: 20 }}>
+                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#d1d5db", marginBottom: 6 }}>Brief / Mood Description</label>
+                <textarea value={briefDesc} onChange={e => setBriefDesc(e.target.value)} placeholder="Describe the mood, style, angles you want..." rows={4} style={{ width: "100%", padding: "10px 14px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.03)", color: "#fff", fontSize: 13, outline: "none", resize: "vertical", fontFamily: "inherit", boxSizing: "border-box" }} />
+              </div>
+              <div style={{ marginBottom: 20 }}>
+                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#d1d5db", marginBottom: 6 }}>Style (click to select)</label>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                  {["Product Shot", "Editorial", "Lifestyle", "Flat Lay", "Minimal", "Mood Lighting", "Artistic"].map(s => (
+                    <button key={s} onClick={() => toggleStyle(s)} style={{ padding: "6px 14px", borderRadius: 20, border: `1px solid ${selectedStyles.includes(s) ? "rgba(78,205,196,0.5)" : "rgba(255,255,255,0.08)"}`, background: selectedStyles.includes(s) ? "rgba(78,205,196,0.15)" : "rgba(255,255,255,0.03)", color: selectedStyles.includes(s) ? "#4ecdc4" : "#9ca3af", fontSize: 12, cursor: "pointer", transition: "all 0.2s" }}>{s}</button>
+                  ))}
+                </div>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 20, marginBottom: 20 }}>
+                {/* Product Photos */}
+                <div>
+                  <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#d1d5db", marginBottom: 6 }}>Product Photos</label>
+                  <div onClick={() => document.getElementById('photoInput').click()}
+                    style={{
+                      display: "grid", justifyItems: "center",
+                      border: "2px dashed rgba(255,255,255,0.08)", borderRadius: 12, padding: "24px 12px", textAlign: "center", cursor: "pointer", transition: "all 0.2s", background: "rgba(255,255,255,0.01)"
+                    }} onMouseEnter={e => e.currentTarget.style.borderColor = "rgba(78,205,196,0.3)"} onMouseLeave={e => e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)"}>
+                    <input type="file" id="photoInput" multiple accept="image/*" style={{ display: "none" }} onChange={e => {
+                      const selectedPlan = plans.find(p => p.id === plan);
+                      const limit = selectedPlan ? selectedPlan.images : 0;
+                      const newFiles = Array.from(e.target.files);
+                      const totalAfterAddition = productPhotos.length + newFiles.length;
+
+                      if (totalAfterAddition > limit) {
+                        const remainingSlots = limit - productPhotos.length;
+                        if (remainingSlots <= 0) {
+                          addToast(`You have already reached the limit of ${limit} photos for this plan.`, "warning");
+                        } else {
+                          addToast(`You can only add ${remainingSlots} more photo(s). Your current selection exceeds the plan limit.`, "warning");
+                        }
+                        return;
+                      }
+                      setProductPhotos(prev => [...prev, ...newFiles]);
+                    }} />
+                    <Camera size={24} color="#4ecdc4" style={{ marginBottom: 8 }} />
+                    <div style={{ fontSize: 13, color: "#e5e7eb", fontWeight: 600 }}>Add Photos</div>
+                    <div style={{ fontSize: 11, color: "#4b5563", marginTop: 4 }}>Max {plans.find(p => p.id === plan)?.images || 0} photos</div>
+                  </div>
+                  <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 6 }}>
+                    {productPhotos.map((f, i) => (
+                      <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 12px", background: "rgba(255,255,255,0.03)", borderRadius: 8, fontSize: 12 }}>
+                        <Image size={12} color="#6b7280" />
+                        <span style={{ flex: 1, color: "#d1d5db", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{f.name}</span>
+                        <button onClick={() => removeFile('photo', i)} style={{ background: "none", border: "none", color: "#ef4444", cursor: "pointer", padding: 2 }}><X size={14} /></button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Documents */}
+                <div>
+                  <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#d1d5db", marginBottom: 6 }}>Documents / Briefs</label>
+                  <div onClick={() => document.getElementById('docInput').click()}
+                    style={{ display: "grid", justifyItems: "center", border: "2px dashed rgba(255,255,255,0.08)", borderRadius: 12, padding: "24px 12px", textAlign: "center", cursor: "pointer", transition: "all 0.2s", background: "rgba(255,255,255,0.01)" }} onMouseEnter={e => e.currentTarget.style.borderColor = "rgba(78,205,196,0.3)"} onMouseLeave={e => e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)"}>
+                    <input type="file" id="docInput" multiple style={{ display: "none" }} onChange={e => setDocumentFiles(prev => [...prev, ...Array.from(e.target.files)])} />
+                    <FileText size={24} color="#4ecdc4" style={{ marginBottom: 8 }} />
+                    <div style={{ fontSize: 13, color: "#e5e7eb", fontWeight: 600 }}>Add Documents</div>
+                    <div style={{ fontSize: 11, color: "#4b5563", marginTop: 4 }}>PDF, DOCX, etc.</div>
+                  </div>
+                  <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 6 }}>
+                    {documentFiles.map((f, i) => (
+                      <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 12px", background: "rgba(255,255,255,0.03)", borderRadius: 8, fontSize: 12 }}>
+                        <FileText size={12} color="#6b7280" />
+                        <span style={{ flex: 1, color: "#d1d5db", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{f.name}</span>
+                        <button onClick={() => removeFile('doc', i)} style={{ background: "none", border: "none", color: "#ef4444", cursor: "pointer", padding: 2 }}><X size={14} /></button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {step === 3 && (
+            <div style={{ width: "100%", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 16, padding: 24 }}>
+              <h3 style={{ fontSize: 16, fontWeight: 700, color: "#fff", margin: "0 0 16px" }}>Order Summary</h3>
+              {[
+                { label: "Plan", val: plans.find(p => p.id === plan)?.name || "—" },
+                { label: "Project", val: projectTitle || "Untitled" },
+                { label: "Images", val: plans.find(p => p.id === plan)?.images || 0 },
+                { label: "Style", val: selectedStyles.join(", ") || "Not specified" },
+                { label: "Photos", val: `${productPhotos.length} selected` },
+                { label: "Documents", val: `${documentFiles.length} selected` },
+                { label: "Revisions", val: "3 included" },
+              ].map((r, i) => (
+                <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid rgba(255,255,255,0.04)", fontSize: 14 }}>
+                  <span style={{ color: "#9ca3af" }}>{r.label}</span><span style={{ color: "#fff", fontWeight: 500 }}>{r.val}</span>
+                </div>
+              ))}
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "16px 0", fontSize: 20 }}>
+                <span style={{ color: "#9ca3af", fontWeight: 600 }}>Total</span><span style={{ color: "#4ecdc4", fontWeight: 800 }}>${plans.find(p => p.id === plan)?.price || 0}</span>
+              </div>
+            </div>
+          )}
+
+          <div style={{ display: "flex", gap: 10, marginTop: 32 }}>
+            {step > 1 && <button onClick={() => setStep(step - 1)} style={{ padding: "12px 24px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.08)", background: "transparent", color: "#9ca3af", fontSize: 13, cursor: "pointer", minWidth: 100 }}>Back</button>}
+            <div style={{ flex: 1 }} />
+            {step < 3 && <button onClick={() => { if (step === 1 && !plan) { addToast("Please select a plan first", "warning"); return; } setStep(step + 1); }} style={{ padding: "12px 24px", borderRadius: 10, border: "none", background: "linear-gradient(135deg,#4ecdc4,#2ab7a9)", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer", opacity: step === 1 && !plan ? 0.4 : 1, minWidth: 120 }}>Continue</button>}
+            {step === 3 && <button onClick={handleSubmitOrder} disabled={isSubmitting} style={{ padding: "12px 32px", borderRadius: 10, border: "none", background: "linear-gradient(135deg,#4ecdc4,#2ab7a9)", color: "#fff", fontSize: 13, fontWeight: 700, cursor: isSubmitting ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, opacity: isSubmitting ? 0.7 : 1, minWidth: 160 }}>{isSubmitting ? <RefreshCw size={13} className="animate-spin" /> : <Send size={13} />} {isSubmitting ? "Submitting..." : "Submit Order"}</button>}
+          </div>
         </div>
       </div>
     );
@@ -824,84 +914,133 @@ export default function TyesClient() {
   // ══════════════════════════════════════
   // ACCOUNT PAGE
   // ══════════════════════════════════════
-  const AccountPage = () => (
-    <div>
-      <h1 style={{ fontSize: 24, fontWeight: 800, color: "#fff", margin: "0 0 24px" }}>Account Settings</h1>
-      <div style={{ maxWidth: 560, display: "flex", flexDirection: "column", gap: 20 }}>
-        <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 16, padding: 24 }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
-            <h3 style={{ fontSize: 14, fontWeight: 700, color: "#fff", margin: 0 }}>Company Info</h3>
-            <button onClick={() => {
-              if (editingCompany) {
-                setClientInfo(prev => ({ ...prev, name: companyName, email: companyEmail }));
-                addToast("Company info updated!");
-              }
-              setEditingCompany(!editingCompany);
-            }} style={{ background: "none", border: "none", color: "#4ecdc4", cursor: "pointer", fontSize: 12, fontWeight: 500, display: "flex", alignItems: "center", gap: 4 }}>
-              {editingCompany ? <><Save size={12} /> Save</> : <><Edit size={12} /> Edit</>}
-            </button>
-          </div>
-          {editingCompany ? (
-            <div>
-              <InputField label="Company Name" value={companyName} onChange={setCompanyName} />
-              <InputField label="Email" value={companyEmail} onChange={setCompanyEmail} />
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8 }}>
-                <span style={{ fontSize: 13, color: "#6b7280" }}>Tier</span>
-                <span style={{ fontSize: 13, color: "#e5e7eb", fontWeight: 500 }}>Pro</span>
+  const AccountPage = () => {
+    const saveAccount = async () => {
+      const parts = companyName.split(" ");
+      const firstName = parts[0];
+      const lastName = parts.slice(1).join(" ");
+
+      try {
+        const { error } = await supabase
+          .from('profiles')
+          .update({ first_name: firstName, last_name: lastName })
+          .eq('id', user.id);
+
+        if (error) throw error;
+
+        setClientInfo(prev => ({ ...prev, name: companyName }));
+        addToast("Account name updated successfully!");
+        setEditingCompany(false);
+      } catch (err) {
+        console.error("Error updating account:", err);
+        addToast("Failed to update account", "error");
+      }
+    };
+
+    return (
+      <div style={{ width: "100%", display: "flex", justifyContent: "center", paddingBottom: 40 }}>
+        <div style={{ width: "100%", maxWidth: 940 }}>
+          <h1 style={{ fontSize: 24, fontWeight: 800, color: "#fff", margin: "0 0 24px" }}>Account Settings</h1>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(380px, 1fr))", gap: 20 }}>
+            <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 16, padding: 24 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+                <h3 style={{ fontSize: 14, fontWeight: 700, color: "#fff", margin: 0 }}>Company Info</h3>
+                <button onClick={() => {
+                  if (editingCompany) {
+                    saveAccount();
+                  } else {
+                    setEditingCompany(true);
+                  }
+                }} style={{ background: "none", border: "none", color: "#4ecdc4", cursor: "pointer", fontSize: 12, fontWeight: 500, display: "flex", alignItems: "center", gap: 4 }}>
+                  {editingCompany ? <><Save size={12} /> Save</> : <><Edit size={12} /> Edit</>}
+                </button>
               </div>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8 }}>
-                <span style={{ fontSize: 13, color: "#6b7280" }}>Member Since</span>
-                <span style={{ fontSize: 13, color: "#e5e7eb", fontWeight: 500 }}>{clientInfo.joined}</span>
-              </div>
-            </div>
-          ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-              {[
-                { label: "Company Name", value: companyName },
-                { label: "Email", value: companyEmail },
-                { label: "Tier", value: "Pro" },
-                { label: "Member Since", value: clientInfo.joined },
-              ].map((f, i) => (
-                <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <span style={{ fontSize: 13, color: "#6b7280" }}>{f.label}</span>
-                  <span style={{ fontSize: 13, color: "#e5e7eb", fontWeight: 500 }}>{f.value}</span>
+              {editingCompany ? (
+                <div>
+                  <InputField label="Company Name" value={companyName} onChange={setCompanyName} />
+                  <div style={{ opacity: 0.6 }}>
+                    <InputField label="Email (Read-only)" value={companyEmail} onChange={() => { }} disabled />
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8 }}>
+                    <span style={{ fontSize: 13, color: "#6b7280" }}>Tier</span>
+                    <span style={{ fontSize: 13, color: "#e5e7eb", fontWeight: 500, textTransform: "capitalize" }}>{clientInfo.tier}</span>
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8 }}>
+                    <span style={{ fontSize: 13, color: "#6b7280" }}>Member Since</span>
+                    <span style={{ fontSize: 13, color: "#e5e7eb", fontWeight: 500 }}>{clientInfo.joined}</span>
+                  </div>
                 </div>
-              ))}
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                  {[
+                    { label: "Company Name", value: companyName },
+                    { label: "Email", value: companyEmail },
+                    { label: "Tier", value: clientInfo.tier },
+                    { label: "Member Since", value: clientInfo.joined },
+                  ].map((f, i) => (
+                    <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <span style={{ fontSize: 13, color: "#6b7280" }}>{f.label}</span>
+                      <span style={{ fontSize: 13, color: "#e5e7eb", fontWeight: 500, textTransform: f.label === "Tier" ? "capitalize" : "none" }}>{f.value}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
-          )}
-        </div>
-        <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 16, padding: 24 }}>
-          <h3 style={{ fontSize: 14, fontWeight: 700, color: "#fff", margin: "0 0 16px" }}>Preferences</h3>
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {[
-              { label: "Email notifications for order updates", key: "orderNotif" },
-              { label: "Email notifications for messages", key: "msgNotif" },
-              { label: "Weekly summary report", key: "weeklyReport" },
-            ].map((p, i) => (
-              <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <span style={{ fontSize: 13, color: "#d1d5db" }}>{p.label}</span>
-                <div onClick={() => { setPrefs(prev => ({ ...prev, [p.key]: !prev[p.key] })); addToast(prefs[p.key] ? `${p.label} disabled` : `${p.label} enabled`); }} style={{ width: 36, height: 20, borderRadius: 10, background: prefs[p.key] ? "#4ecdc4" : "rgba(255,255,255,0.1)", padding: 2, cursor: "pointer", transition: "background 0.2s" }}>
-                  <div style={{ width: 16, height: 16, borderRadius: "50%", background: "#fff", transform: prefs[p.key] ? "translateX(16px)" : "translateX(0)", transition: "transform 0.2s" }} />
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+              <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 16, padding: 24, height: "100%" }}>
+                <h3 style={{ fontSize: 14, fontWeight: 700, color: "#fff", margin: "0 0 16px" }}>Preferences</h3>
+                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                  {[
+                    { label: "Email notifications for order updates", key: "orderNotif" },
+                    { label: "Weekly summary report", key: "weeklyReport" },
+                  ].map((p, i) => (
+                    <div key={i} onClick={async () => {
+                      const newVal = !prefs[p.key];
+                      const newPrefs = { ...prefs, [p.key]: newVal };
+                      setPrefs(newPrefs);
+                      addToast(newVal ? `${p.label} enabled` : `${p.label} disabled`);
+
+                      try {
+                        // Store preferences in user_metadata since column is missing in profiles table
+                        const { error } = await supabase.auth.updateUser({
+                          data: { preferences: newPrefs }
+                        });
+                        if (error) throw error;
+                      } catch (err) {
+                        console.error("Error saving preference:", err);
+                        addToast("Failed to save preference", "error");
+                        // Rollback on error
+                        setPrefs(prev => ({ ...prev, [p.key]: !newVal }));
+                      }
+                    }} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 0", cursor: "pointer" }}>
+                      <span style={{ fontSize: 13, color: "#d1d5db" }}>{p.label}</span>
+                      <div style={{ width: 36, height: 20, borderRadius: 10, background: prefs[p.key] ? "#4ecdc4" : "rgba(255,255,255,0.1)", padding: 2, transition: "background 0.2s" }}>
+                        <div style={{ width: 16, height: 16, borderRadius: "50%", background: "#fff", transform: prefs[p.key] ? "translateX(16px)" : "translateX(0)", transition: "transform 0.2s" }} />
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
-            ))}
-          </div>
-        </div>
-        <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 16, padding: 24 }}>
-          <h3 style={{ fontSize: 14, fontWeight: 700, color: "#fff", margin: "0 0 16px" }}>Payment Method</h3>
-          <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 16px", borderRadius: 10, background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)" }}>
-            <CreditCard size={18} color="#6b7280" />
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 13, color: "#e5e7eb" }}>Visa ending in 4242</div>
-              <div style={{ fontSize: 11, color: "#4b5563" }}>Expires 08/2028</div>
+
+              <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 16, padding: 24 }}>
+                <h3 style={{ fontSize: 14, fontWeight: 700, color: "#fff", margin: "0 0 16px" }}>Payment Method</h3>
+                <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 16px", borderRadius: 10, background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)" }}>
+                  <CreditCard size={18} color="#6b7280" />
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 13, color: "#e5e7eb" }}>Visa ending in 4242</div>
+                    <div style={{ fontSize: 11, color: "#4b5563" }}>Expires 08/2028</div>
+                  </div>
+                  <button onClick={() => addToast("Payment method update — redirecting to billing portal...", "info")} style={{ fontSize: 12, color: "#4ecdc4", background: "none", border: "none", cursor: "pointer", fontWeight: 500 }}>Change</button>
+                </div>
+              </div>
+              <button onClick={() => addToast("Account deletion request sent — our team will contact you", "warning")} style={{ padding: "10px 0", borderRadius: 10, border: "1px solid rgba(239,68,68,0.3)", background: "rgba(239,68,68,0.06)", color: "#f87171", fontSize: 13, fontWeight: 500, cursor: "pointer" }}>Delete Account</button>
             </div>
-            <button onClick={() => addToast("Payment method update — redirecting to billing portal...", "info")} style={{ fontSize: 12, color: "#4ecdc4", background: "none", border: "none", cursor: "pointer", fontWeight: 500 }}>Change</button>
           </div>
         </div>
-        <button onClick={() => addToast("Account deletion request sent — our team will contact you", "warning")} style={{ padding: "10px 0", borderRadius: 10, border: "1px solid rgba(239,68,68,0.3)", background: "rgba(239,68,68,0.06)", color: "#f87171", fontSize: 13, fontWeight: 500, cursor: "pointer" }}>Delete Account</button>
       </div>
-    </div>
-  );
+    );
+  };
 
   // ══════════════════════════════════════
   // RENDER
@@ -966,29 +1105,91 @@ export default function TyesClient() {
         )}
       </Modal>
 
-      {/* Revision Request Modal */}
-      <Modal open={!!showRevisionModal} onClose={() => setShowRevisionModal(null)} title="Request Revision">
+      {/* Revision Modal */}
+      <Modal open={!!showRevisionModal} onClose={() => setShowRevisionModal(null)} title="Request Revision" width={480}>
         {showRevisionModal && (
-          <div>
-            <p style={{ color: "#9ca3af", fontSize: 13, margin: "0 0 16px" }}>Requesting revision for <strong style={{ color: "#fff" }}>{showRevisionModal.title}</strong> ({showRevisionModal.revisions}/{showRevisionModal.maxRevisions} revisions used)</p>
-            {showRevisionModal.revisions >= showRevisionModal.maxRevisions ? (
-              <div style={{ padding: 16, borderRadius: 10, background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", color: "#f87171", fontSize: 13 }}>
-                <AlertCircle size={14} style={{ marginRight: 6, verticalAlign: "middle" }} /> You've used all available revisions for this order. Please contact support for additional revisions.
-              </div>
-            ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+            <div style={{ padding: 14, background: "rgba(251,191,36,0.05)", border: "1px solid rgba(251,191,36,0.15)", borderRadius: 12, display: "flex", gap: 12 }}>
+              <AlertCircle size={20} color="#fbbf24" style={{ marginTop: 2, flexShrink: 0 }} />
               <div>
-                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#d1d5db", marginBottom: 6 }}>Revision Notes</label>
-                <textarea placeholder="Describe what changes you'd like..." rows={4} style={{ width: "100%", padding: "10px 14px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.03)", color: "#fff", fontSize: 13, outline: "none", resize: "vertical", fontFamily: "inherit", boxSizing: "border-box", marginBottom: 16 }} />
-                <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
-                  <button onClick={() => setShowRevisionModal(null)} style={{ padding: "8px 16px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.08)", background: "transparent", color: "#9ca3af", fontSize: 12, cursor: "pointer" }}>Cancel</button>
-                  <button onClick={() => {
-                    setOrders(prev => prev.map(o => o.id === showRevisionModal.id ? { ...o, revisions: o.revisions + 1 } : o));
-                    setShowRevisionModal(null);
-                    addToast("Revision requested! Our team will review your notes.");
-                  }} style={{ padding: "8px 16px", borderRadius: 8, border: "none", background: "linear-gradient(135deg,#4ecdc4,#2ab7a9)", color: "#fff", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>Submit Revision</button>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#fbbf24", marginBottom: 2 }}>Revision Guidelines</div>
+                <div style={{ fontSize: 11, color: "#9ca3af", lineHeight: "1.5" }}>
+                  Please be specific about what you'd like to change. Describe the desired result clearly to help our designers deliver exactly what you need.
                 </div>
               </div>
-            )}
+            </div>
+
+            <div>
+              <div style={{ marginBottom: 12 }}>
+                <div style={{ fontSize: 11, color: "#6b7280", fontWeight: 600, textTransform: "uppercase", marginBottom: 4 }}>Requested For</div>
+                <div style={{ fontSize: 14, color: "#fff", fontWeight: 500 }}>
+                  {showRevisionModal.itemIndex !== null
+                    ? `Item: ${showRevisionModal.order.items[showRevisionModal.itemIndex]?.name}`
+                    : `Order: ${showRevisionModal.order.id}`}
+                </div>
+              </div>
+
+              <div style={{ fontSize: 11, color: "#6b7280", fontWeight: 600, textTransform: "uppercase", marginBottom: 8 }}>Revision Details</div>
+              <textarea
+                placeholder="E.g. Please make the lighting warmer and increase the contrast on the product labels..."
+                id="revision-reason"
+                style={{ width: "100%", height: 120, padding: 14, borderRadius: 12, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", color: "#fff", fontSize: 13, outline: "none", resize: "none", boxSizing: "border-box" }}
+              />
+            </div>
+
+            <div style={{ display: "flex", gap: 12, justifyContent: "flex-end" }}>
+              <button onClick={() => setShowRevisionModal(null)} style={{ padding: "10px 20px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.1)", background: "transparent", color: "#9ca3af", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>Cancel</button>
+              <button
+                onClick={async () => {
+                  const reason = document.getElementById("revision-reason").value;
+                  if (!reason) {
+                    addToast("Please provide a reason for the revision", "warning");
+                    return;
+                  }
+
+                  const { order, itemIndex } = showRevisionModal;
+                  const newItems = [...order.items];
+
+                  if (itemIndex !== null) {
+                    newItems[itemIndex] = {
+                      ...newItems[itemIndex],
+                      status: "revision",
+                      revisionReason: reason,
+                      revisionDate: new Date().toISOString()
+                    };
+                  } else {
+                    newItems.forEach((item, idx) => {
+                      if (item.status === "delivered") {
+                        newItems[idx] = { ...item, status: "revision", revisionReason: reason };
+                      }
+                    });
+                  }
+
+                  try {
+                    const { error } = await supabase
+                      .from('orders')
+                      .update({
+                        items: newItems,
+                        status: "revision",
+                        revisions: (order.revisions || 0) + 1
+                      })
+                      .eq('id', order.id);
+
+                    if (error) throw error;
+
+                    setOrders(prev => prev.map(o => o.id === order.id ? { ...o, items: newItems, status: "revision", revisions: (o.revisions || 0) + 1 } : o));
+                    setShowRevisionModal(null);
+                    addToast("Revision request submitted successfully!");
+                  } catch (err) {
+                    console.error("Revision error:", err);
+                    addToast("Failed to submit revision request", "error");
+                  }
+                }}
+                style={{ padding: "10px 24px", borderRadius: 10, border: "none", background: "linear-gradient(135deg,#4ecdc4,#2ab7a9)", color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer" }}
+              >
+                Submit Request
+              </button>
+            </div>
           </div>
         )}
       </Modal>
