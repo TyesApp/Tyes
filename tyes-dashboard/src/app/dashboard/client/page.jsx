@@ -11,7 +11,7 @@ import { Search, Bell, ChevronDown, ChevronRight, ChevronLeft, Download, MoreVer
 const useToast = () => {
   const [toasts, setToasts] = useState([]);
   const addToast = useCallback((message, type = "success") => {
-    const id = Date.now();
+    const id = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     setToasts(t => [...t, { id, message, type }]);
     setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), 3000);
   }, []);
@@ -115,6 +115,107 @@ export default function TyesClient() {
   const [showNotifDrop, setShowNotifDrop] = useState(false);
   const [showProfileDrop, setShowProfileDrop] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState(null);
+  const [pricingPlans, setPricingPlans] = useState([]);
+  const [orders, setOrders] = useState([]);
+
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      // 1. Get User
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      if (!authUser) {
+        router.push("/auth");
+        return;
+      }
+      setUser(authUser);
+
+      // 2. Fetch Profile
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', authUser.id)
+        .single();
+
+      if (profile) {
+        setClientInfo({
+          name: `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || profile.email,
+          email: profile.email,
+          tier: profile.tier || "starter",
+          joined: new Date(profile.created_at).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
+          totalOrders: profile.orders_count || 0,
+          totalSpent: profile.total_spent || 0,
+          imagesDelivered: 0, // Would need more logic if tracking this separately
+          freeTestUsed: true,
+        });
+      }
+
+      // 3. Fetch Plans
+      const { data: plansData } = await supabase
+        .from('pricing_plans')
+        .select('*')
+        .eq('active', true)
+        .order('price', { ascending: true });
+      if (plansData) setPricingPlans(plansData);
+
+      // 4. Fetch Orders
+      const { data: ordersData } = await supabase
+        .from('orders')
+        .select('*')
+        .eq('customer_email', authUser.email)
+        .order('created_at', { descending: true });
+
+      if (ordersData) {
+        setOrders(ordersData.map(o => {
+          let items = o.items || [];
+
+          // Fallback: If items is empty but attachments has photos, use those
+          if (items.length === 0 && o.attachments && o.attachments.photos) {
+            items = o.attachments.photos.map((url, idx) => ({
+              name: `Product Photo ${idx + 1}`,
+              mainImage: url,
+              finishImage: "",
+              status: o.status || "pending"
+            }));
+          }
+
+          let derivedStatus = o.status || "pending";
+
+          if (items.length > 0) {
+            const allDelivered = items.every(i => i.status === "delivered" || i.status === "completed");
+            const anyRevision = items.some(i => i.status === "revision");
+
+            if (allDelivered) derivedStatus = "delivered";
+            else if (anyRevision) derivedStatus = "revision";
+            else if (items.some(i => i.status === "in_progress")) derivedStatus = "in_progress";
+          }
+
+          return {
+            ...o,
+            id: o.id,
+            title: o.title || `Order ${o.id.slice(0, 8)}`,
+            date: new Date(o.created_at).toISOString().split('T')[0],
+            images: o.images_count || 0,
+            status: derivedStatus,
+            progress: o.progress || 0,
+            revisions: o.revisions || 0,
+            maxRevisions: o.max_revisions || 3,
+            items: items
+          };
+        }));
+      }
+
+    } catch (err) {
+      console.error("Error fetching dashboard data:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchData();
+  }, [supabase]);
 
   const handleLogout = async () => {
     try {
@@ -127,39 +228,10 @@ export default function TyesClient() {
   const [showOrderDetailModal, setShowOrderDetailModal] = useState(null);
   const [showRevisionModal, setShowRevisionModal] = useState(null);
 
-  // ── Client Info State ──
+  // Client info and orders are now initialized empty and filled by fetchData
   const [clientInfo, setClientInfo] = useState({
-    name: "Glossier Inc.", email: "studio@glossier.com", tier: "pro", joined: "Dec 2025", totalOrders: 8, totalSpent: 640, imagesDelivered: 42, freeTestUsed: true,
+    name: "Loading...", email: "", tier: "...", joined: "...", totalOrders: 0, totalSpent: 0, imagesDelivered: 0, freeTestUsed: false,
   });
-
-  // ── Orders State ──
-  const [orders, setOrders] = useState([
-    { id: "ORD-3011", title: "Spring Skincare Campaign", plan: "Growth", images: 10, status: "revision", category: "Skincare", date: "2026-04-13", revenue: 80, revisions: 2, maxRevisions: 3, progress: 75, items: [
-      { name: "Milky Jelly Cleanser — Hero", status: "approved" },
-      { name: "Milky Jelly Cleanser — Lifestyle", status: "approved" },
-      { name: "Priming Moisturizer — Product Shot", status: "revision" },
-      { name: "Priming Moisturizer — Editorial", status: "revision" },
-      { name: "Super Pure Serum — Close Up", status: "in_progress" },
-      { name: "Super Pure Serum — Flatlay", status: "in_progress" },
-      { name: "Balm Dotcom — Hero", status: "pending" },
-      { name: "Balm Dotcom — Texture", status: "pending" },
-      { name: "Solution — Product Shot", status: "pending" },
-      { name: "Solution — Before/After", status: "pending" },
-    ]},
-    { id: "ORD-2988", title: "Cloud Paint Collection", plan: "Starter", images: 5, status: "delivered", category: "Makeup", date: "2026-03-28", revenue: 45, revisions: 1, maxRevisions: 3, progress: 100, items: [
-      { name: "Cloud Paint Dusk — Hero", status: "delivered" },
-      { name: "Cloud Paint Beam — Hero", status: "delivered" },
-      { name: "Cloud Paint Storm — Hero", status: "delivered" },
-      { name: "Cloud Paint Puff — Lifestyle", status: "delivered" },
-      { name: "Cloud Paint Range — Flatlay", status: "delivered" },
-    ]},
-    { id: "ORD-2965", title: "Boy Brow Product Shots", plan: "Starter", images: 5, status: "delivered", category: "Makeup", date: "2026-03-15", revenue: 45, revisions: 0, maxRevisions: 3, progress: 100, items: [] },
-    { id: "ORD-2940", title: "Futuredew Editorial", plan: "Growth", images: 10, status: "delivered", category: "Skincare", date: "2026-03-01", revenue: 80, revisions: 1, maxRevisions: 3, progress: 100, items: [] },
-    { id: "ORD-2921", title: "Lash Slick Campaign", plan: "Starter", images: 5, status: "delivered", category: "Makeup", date: "2026-02-18", revenue: 45, revisions: 0, maxRevisions: 3, progress: 100, items: [] },
-    { id: "ORD-2900", title: "Skin Tint Launch", plan: "Growth", images: 10, status: "delivered", category: "Makeup", date: "2026-02-05", revenue: 80, revisions: 2, maxRevisions: 3, progress: 100, items: [] },
-    { id: "ORD-2880", title: "Glossier You Perfume", plan: "Single", images: 1, status: "delivered", category: "Fragrance", date: "2026-01-20", revenue: 10, revisions: 0, maxRevisions: 3, progress: 100, items: [] },
-    { id: "ORD-2855", title: "Free Test — Milky Jelly", plan: "Free Test", images: 1, status: "delivered", category: "Skincare", date: "2025-12-18", revenue: 0, revisions: 0, maxRevisions: 3, progress: 100, items: [] },
-  ]);
 
   // ── Messages State ──
   const [messagesList, setMessagesList] = useState([
@@ -407,26 +479,105 @@ export default function TyesClient() {
     const [projectTitle, setProjectTitle] = useState("");
     const [briefDesc, setBriefDesc] = useState("");
     const [selectedStyles, setSelectedStyles] = useState([]);
-    const plans = [
-      { id: 1, name: "Single", images: 1, price: 10 },
-      { id: 2, name: "Starter", images: 5, price: 45, badge: "Popular" },
-      { id: 3, name: "Growth", images: 10, price: 80, badge: "Best Value" },
-      { id: 4, name: "Social Pack", images: 7, price: 55 },
-    ];
+    const [productPhotos, setProductPhotos] = useState([]);
+    const [documentFiles, setDocumentFiles] = useState([]);
+    const [isSubmitting, setIsSubmitting] = useState(false);
+
+    const plans = pricingPlans;
 
     const toggleStyle = (s) => setSelectedStyles(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]);
 
-    const handleSubmitOrder = () => {
+    const removeFile = (type, index) => {
+      if (type === 'photo') setProductPhotos(prev => prev.filter((_, i) => i !== index));
+      else setDocumentFiles(prev => prev.filter((_, i) => i !== index));
+    };
+
+    const handleSubmitOrder = async () => {
       const selectedPlan = plans.find(p => p.id === plan);
       if (!selectedPlan) return;
-      const newId = `ORD-${3012 + orders.length}`;
-      const newOrder = {
-        id: newId, title: projectTitle || `New ${selectedPlan.name} Order`, plan: selectedPlan.name, images: selectedPlan.images, status: "pending", category: "General", date: new Date().toISOString().split("T")[0], revenue: selectedPlan.price, revisions: 0, maxRevisions: 3, progress: 0, items: [],
-      };
-      setOrders(prev => [newOrder, ...prev]);
-      setInvoices(prev => [{ id: `INV-${88 + prev.length}`, order: newId, amount: selectedPlan.price, status: "pending", date: newOrder.date, due: "2026-04-29" }, ...prev]);
-      addToast(`Order ${newId} submitted! We'll start working on it right away.`);
-      setPage("orders");
+
+      setIsSubmitting(true);
+      addToast("Starting order submission...", "info");
+
+      try {
+        const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
+        const uploadPreset = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
+
+        const uploadToCloudinary = async (files) => {
+          const urls = [];
+          for (const file of files) {
+            const formData = new FormData();
+            formData.append("file", file);
+            formData.append("upload_preset", uploadPreset);
+            const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/upload`, { method: "POST", body: formData });
+            const data = await res.json();
+            if (data.secure_url) urls.push(data.secure_url);
+          }
+          return urls;
+        };
+
+        let photoUrls = [];
+        let docUrls = [];
+
+        if (cloudName && uploadPreset) {
+          if (productPhotos.length > 0) {
+            addToast(`Uploading ${productPhotos.length} photos...`, "info");
+            photoUrls = await uploadToCloudinary(productPhotos);
+          }
+          if (documentFiles.length > 0) {
+            addToast(`Uploading ${documentFiles.length} documents...`, "info");
+            docUrls = await uploadToCloudinary(documentFiles);
+          }
+        } else {
+          addToast("Cloudinary not configured. Files will not be saved.", "warning");
+        }
+
+        // 2. Save order to Supabase
+        const orderId = `ORD-${Math.floor(100000 + Math.random() * 900000)}`;
+        const actualImagesCount = selectedPlan.images || 0;
+
+        // Structured items with mainImage, finishImage, name, and status
+        const structuredItems = productPhotos.map((file, index) => ({
+          name: file.name,
+          mainImage: photoUrls[index] || "",
+          finishImage: "", // Will be filled by admin later
+          status: "pending"
+        }));
+
+        const { error } = await supabase
+          .from('orders')
+          .insert([{
+            id: orderId,
+            title: projectTitle || `New ${selectedPlan.name} Order`,
+            plan: selectedPlan.name,
+            images_count: actualImagesCount,
+            status: "pending",
+            category: "General",
+            revenue: selectedPlan.price || 0,
+            revisions: 0,
+            max_revisions: selectedPlan.max_revisions || 3,
+            progress: 0,
+            customer_email: user.email,
+            customer_name: clientInfo.name,
+            user_id: user.id,
+            attachments: { photos: photoUrls, status: "pending" },
+            documents: docUrls, // Dedicated documents column
+            items: structuredItems,
+            brief_description: briefDesc,
+            selected_styles: selectedStyles
+          }]);
+
+        if (error) throw error;
+
+        addToast("Order submitted successfully!", "success");
+        fetchData();
+        setPage("orders");
+      } catch (err) {
+        console.error("Submission error:", err);
+        addToast(err.message || "Failed to submit order", "error");
+      } finally {
+        setIsSubmitting(false);
+      }
     };
 
     return (
@@ -448,15 +599,22 @@ export default function TyesClient() {
 
         {step === 1 && (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 16 }}>
-            {plans.map(p => (
-              <div key={p.id} onClick={() => setPlan(p.id)} style={{ background: plan === p.id ? "rgba(78,205,196,0.06)" : "rgba(255,255,255,0.03)", border: `2px solid ${plan === p.id ? "rgba(78,205,196,0.5)" : "rgba(255,255,255,0.06)"}`, borderRadius: 16, padding: 24, cursor: "pointer", transition: "all 0.2s", position: "relative" }}>
-                {p.badge && <span style={{ position: "absolute", top: 12, right: 12, background: "rgba(78,205,196,0.15)", color: "#4ecdc4", fontSize: 10, fontWeight: 600, padding: "2px 8px", borderRadius: 10 }}>{p.badge}</span>}
-                <div style={{ fontSize: 28, fontWeight: 900, color: "#fff", marginBottom: 4 }}>${p.price}</div>
-                <div style={{ fontSize: 15, fontWeight: 700, color: "#e5e7eb", marginBottom: 4 }}>{p.name}</div>
-                <div style={{ fontSize: 12, color: "#6b7280" }}>{p.images} image{p.images > 1 ? "s" : ""} · 3 revisions</div>
-                {plan === p.id && <div style={{ position: "absolute", top: 12, left: 12 }}><Check size={16} color="#4ecdc4" /></div>}
+            {plans.length === 0 ? (
+              <div style={{ gridColumn: "1 / -1", textAlign: "center", padding: "40px", color: "#6b7280" }}>
+                <RefreshCw size={24} className="animate-spin" style={{ margin: "0 auto 12px", opacity: 0.5 }} />
+                <p>Loading plans...</p>
               </div>
-            ))}
+            ) : (
+              plans.map(p => (
+                <div key={p.id} onClick={() => setPlan(p.id)} style={{ background: plan === p.id ? "rgba(78,205,196,0.06)" : "rgba(255,255,255,0.03)", border: `2px solid ${plan === p.id ? "rgba(78,205,196,0.5)" : "rgba(255,255,255,0.06)"}`, borderRadius: 16, padding: 24, cursor: "pointer", transition: "all 0.2s", position: "relative" }}>
+                  {p.badge && <span style={{ position: "absolute", top: 12, right: 12, background: "rgba(78,205,196,0.15)", color: "#4ecdc4", fontSize: 10, fontWeight: 600, padding: "2px 8px", borderRadius: 10 }}>{p.badge}</span>}
+                  <div style={{ fontSize: 28, fontWeight: 900, color: "#fff", marginBottom: 4 }}>${p.price}</div>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: "#e5e7eb", marginBottom: 4 }}>{p.name}</div>
+                  <div style={{ fontSize: 12, color: "#6b7280" }}>{p.images} image{p.images > 1 ? "s" : ""} · 3 revisions</div>
+                  {plan === p.id && <div style={{ position: "absolute", top: 12, left: 12 }}><Check size={16} color="#4ecdc4" /></div>}
+                </div>
+              ))
+            )}
           </div>
         )}
 
@@ -476,15 +634,58 @@ export default function TyesClient() {
               </div>
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 20 }}>
-              <div onClick={() => addToast("File picker opened — select your product photo", "info")} style={{ border: "2px dashed rgba(255,255,255,0.08)", borderRadius: 12, padding: 24, textAlign: "center", cursor: "pointer" }} onMouseEnter={e => e.currentTarget.style.borderColor = "rgba(78,205,196,0.3)"} onMouseLeave={e => e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)"}>
-                <Camera size={24} color="#4b5563" style={{ marginBottom: 8 }} />
-                <div style={{ fontSize: 12, color: "#9ca3af", fontWeight: 500 }}>Product Photo</div>
-                <div style={{ fontSize: 11, color: "#4b5563" }}>White background, high-res</div>
+              {/* Product Photos */}
+              <div>
+                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#d1d5db", marginBottom: 6 }}>Product Photos</label>
+                <div onClick={() => document.getElementById('photoInput').click()} style={{ border: "2px dashed rgba(255,255,255,0.08)", borderRadius: 12, padding: "20px 12px", textAlign: "center", cursor: "pointer", transition: "all 0.2s", background: "rgba(255,255,255,0.01)" }} onMouseEnter={e => e.currentTarget.style.borderColor = "rgba(78,205,196,0.3)"} onMouseLeave={e => e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)"}>
+                  <input type="file" id="photoInput" multiple accept="image/*" style={{ display: "none" }} onChange={e => {
+                    const selectedPlan = plans.find(p => p.id === plan);
+                    const limit = selectedPlan ? selectedPlan.images : 0;
+                    const newFiles = Array.from(e.target.files);
+                    const totalAfterAddition = productPhotos.length + newFiles.length;
+
+                    if (totalAfterAddition > limit) {
+                      const remainingSlots = limit - productPhotos.length;
+                      if (remainingSlots <= 0) {
+                        addToast(`You have already reached the limit of ${limit} photos for this plan.`, "warning");
+                      } else {
+                        addToast(`You can only add ${remainingSlots} more photo(s). Your current selection exceeds the plan limit.`, "warning");
+                      }
+                      return;
+                    }
+                    setProductPhotos(prev => [...prev, ...newFiles]);
+                  }} />
+                  <Camera size={20} color="#4ecdc4" style={{ marginBottom: 6 }} />
+                  <div style={{ fontSize: 12, color: "#e5e7eb", fontWeight: 600 }}>Add Photos</div>
+                </div>
+                <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 4 }}>
+                  {productPhotos.map((f, i) => (
+                    <div key={i} style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 8px", background: "rgba(255,255,255,0.03)", borderRadius: 6, fontSize: 11 }}>
+                      <Image size={10} color="#6b7280" />
+                      <span style={{ flex: 1, color: "#d1d5db", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{f.name}</span>
+                      <button onClick={() => removeFile('photo', i)} style={{ background: "none", border: "none", color: "#ef4444", cursor: "pointer", padding: 2 }}><X size={12} /></button>
+                    </div>
+                  ))}
+                </div>
               </div>
-              <div onClick={() => addToast("File picker opened — select your label/font file", "info")} style={{ border: "2px dashed rgba(255,255,255,0.08)", borderRadius: 12, padding: 24, textAlign: "center", cursor: "pointer" }} onMouseEnter={e => e.currentTarget.style.borderColor = "rgba(78,205,196,0.3)"} onMouseLeave={e => e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)"}>
-                <FileText size={24} color="#4b5563" style={{ marginBottom: 8 }} />
-                <div style={{ fontSize: 12, color: "#9ca3af", fontWeight: 500 }}>Label / Font File</div>
-                <div style={{ fontSize: 11, color: "#4b5563" }}>.ai, .pdf, .ttf, .otf</div>
+
+              {/* Documents */}
+              <div>
+                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#d1d5db", marginBottom: 6 }}>Documents / Briefs</label>
+                <div onClick={() => document.getElementById('docInput').click()} style={{ border: "2px dashed rgba(255,255,255,0.08)", borderRadius: 12, padding: "20px 12px", textAlign: "center", cursor: "pointer", transition: "all 0.2s", background: "rgba(255,255,255,0.01)" }} onMouseEnter={e => e.currentTarget.style.borderColor = "rgba(78,205,196,0.3)"} onMouseLeave={e => e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)"}>
+                  <input type="file" id="docInput" multiple style={{ display: "none" }} onChange={e => setDocumentFiles(prev => [...prev, ...Array.from(e.target.files)])} />
+                  <FileText size={20} color="#4ecdc4" style={{ marginBottom: 6 }} />
+                  <div style={{ fontSize: 12, color: "#e5e7eb", fontWeight: 600 }}>Add Documents</div>
+                </div>
+                <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 4 }}>
+                  {documentFiles.map((f, i) => (
+                    <div key={i} style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 8px", background: "rgba(255,255,255,0.03)", borderRadius: 6, fontSize: 11 }}>
+                      <FileText size={10} color="#6b7280" />
+                      <span style={{ flex: 1, color: "#d1d5db", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{f.name}</span>
+                      <button onClick={() => removeFile('doc', i)} style={{ background: "none", border: "none", color: "#ef4444", cursor: "pointer", padding: 2 }}><X size={12} /></button>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
@@ -498,6 +699,8 @@ export default function TyesClient() {
               { label: "Project", val: projectTitle || "Untitled" },
               { label: "Images", val: plans.find(p => p.id === plan)?.images || 0 },
               { label: "Style", val: selectedStyles.join(", ") || "Not specified" },
+              { label: "Photos", val: `${productPhotos.length} selected` },
+              { label: "Documents", val: `${documentFiles.length} selected` },
               { label: "Revisions", val: "3 included" },
             ].map((r, i) => (
               <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: "1px solid rgba(255,255,255,0.04)", fontSize: 13 }}>
@@ -513,7 +716,7 @@ export default function TyesClient() {
         <div style={{ display: "flex", gap: 10, marginTop: 28 }}>
           {step > 1 && <button onClick={() => setStep(step - 1)} style={{ padding: "10px 20px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.08)", background: "transparent", color: "#9ca3af", fontSize: 13, cursor: "pointer" }}>Back</button>}
           {step < 3 && <button onClick={() => { if (step === 1 && !plan) { addToast("Please select a plan first", "warning"); return; } setStep(step + 1); }} style={{ padding: "10px 20px", borderRadius: 10, border: "none", background: "linear-gradient(135deg,#4ecdc4,#2ab7a9)", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer", opacity: step === 1 && !plan ? 0.4 : 1 }}>Continue</button>}
-          {step === 3 && <button onClick={handleSubmitOrder} style={{ padding: "10px 24px", borderRadius: 10, border: "none", background: "linear-gradient(135deg,#4ecdc4,#2ab7a9)", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}><Send size={13} /> Submit Order</button>}
+          {step === 3 && <button onClick={handleSubmitOrder} disabled={isSubmitting} style={{ padding: "10px 24px", borderRadius: 10, border: "none", background: "linear-gradient(135deg,#4ecdc4,#2ab7a9)", color: "#fff", fontSize: 13, fontWeight: 600, cursor: isSubmitting ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: 6, opacity: isSubmitting ? 0.7 : 1 }}>{isSubmitting ? <RefreshCw size={13} className="animate-spin" /> : <Send size={13} />} {isSubmitting ? "Submitting..." : "Submit Order"}</button>}
         </div>
       </div>
     );
@@ -714,6 +917,17 @@ export default function TyesClient() {
       default: return <OverviewPage />;
     }
   };
+
+  if (loading) {
+    return (
+      <div style={{ background: "#050505", minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div style={{ textAlign: "center" }}>
+          <RefreshCw size={32} className="animate-spin" style={{ color: "#4ecdc4", marginBottom: 12 }} />
+          <div style={{ color: "#6b7280", fontSize: 14, fontWeight: 500 }}>Initializing your dashboard...</div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ display: "flex", height: "100vh", background: "#0a0a0a", fontFamily: "'Inter',-apple-system,sans-serif", color: "#fff", overflow: "hidden" }}>
