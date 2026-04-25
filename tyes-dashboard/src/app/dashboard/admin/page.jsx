@@ -632,7 +632,7 @@ const SettingsPage = ({ toast, studioInfo, setStudioInfo, supabase, users, setUs
         firstName: adminUser.user_metadata?.first_name || "",
         lastName: adminUser.user_metadata?.last_name || "",
         email: adminUser.email || "",
-        description: form.description 
+        description: form.description
       });
     }
   }, [adminUser]);
@@ -661,14 +661,14 @@ const SettingsPage = ({ toast, studioInfo, setStudioInfo, supabase, users, setUs
 
       // 2. Update Auth Metadata (so sidebar and other UI update immediately)
       const { error: authError } = await supabase.auth.updateUser({
-        data: { 
+        data: {
           first_name: form.firstName,
-          last_name: form.lastName 
+          last_name: form.lastName
         }
       });
 
       if (authError) throw authError;
-      
+
       // 3. Update parent state immediately for real-time sidebar update
       if (setAdminUser) {
         setAdminUser(prev => ({
@@ -680,7 +680,7 @@ const SettingsPage = ({ toast, studioInfo, setStudioInfo, supabase, users, setUs
           }
         }));
       }
-      
+
       toast("Profile updated successfully!");
     } catch (err) {
       console.error("Error updating profile:", err);
@@ -699,7 +699,7 @@ const SettingsPage = ({ toast, studioInfo, setStudioInfo, supabase, users, setUs
         .eq('id', id);
 
       if (error) throw error;
-      
+
       // Update local state
       if (setUsers) {
         setUsers(prev => prev.filter(u => u.id !== id));
@@ -719,7 +719,7 @@ const SettingsPage = ({ toast, studioInfo, setStudioInfo, supabase, users, setUs
       toast("Email Address is required", "warning");
       return;
     }
-    
+
     try {
       const { data, error } = await supabase
         .from('profiles')
@@ -728,7 +728,7 @@ const SettingsPage = ({ toast, studioInfo, setStudioInfo, supabase, users, setUs
         .select();
 
       if (error) throw error;
-      
+
       if (!data || data.length === 0) {
         toast("User not found. They must register as a client first before you can promote them to the team.", "info", 5000);
         return;
@@ -770,10 +770,10 @@ const SettingsPage = ({ toast, studioInfo, setStudioInfo, supabase, users, setUs
             <InputField label="Last Name" value={form.lastName} onChange={v => setForm({ ...form, lastName: v })} />
           </div>
           <div style={{ opacity: 0.7 }}>
-            <InputField label="Account Email (Read-only)" value={form.email} onChange={() => {}} disabled />
+            <InputField label="Account Email (Read-only)" value={form.email} onChange={() => { }} disabled />
           </div>
           <button onClick={saveAdminProfile} disabled={saving} style={{ padding: "8px 18px", borderRadius: 8, border: "none", background: saving ? "#4b5563" : "linear-gradient(135deg,#4ecdc4,#2ab7a9)", color: "#fff", fontSize: 12, fontWeight: 600, cursor: saving ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: 4 }}>
-            {saving ? <RefreshCw size={12} className="animate-spin" /> : <Save size={12} />} 
+            {saving ? <RefreshCw size={12} className="animate-spin" /> : <Save size={12} />}
             {saving ? "Saving..." : "Save Changes"}
           </button>
         </div>
@@ -790,8 +790,8 @@ const SettingsPage = ({ toast, studioInfo, setStudioInfo, supabase, users, setUs
               <InputField label="Staff Email" value={addForm.email} onChange={v => setAddForm({ ...addForm, email: v })} placeholder="e.g. staff@example.com" />
               <div style={{ marginBottom: 16 }}>
                 <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 6, fontWeight: 600, textTransform: "uppercase" }}>Assign Role</div>
-                <select 
-                  value={addForm.role} 
+                <select
+                  value={addForm.role}
                   onChange={e => setAddForm({ ...addForm, role: e.target.value })}
                   style={{ width: "100%", padding: "10px 12px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.03)", color: "#fff", fontSize: 13, outline: "none" }}
                 >
@@ -991,7 +991,7 @@ export default function TyesAdmin() {
       .channel('profiles-realtime')
       .on('postgres_changes', { event: '*', table: 'profiles' }, (payload) => {
         const { eventType, new: newRow, old: oldRow } = payload;
-        
+
         setUsers(currentUsers => {
           if (eventType === 'INSERT') {
             const newUser = {
@@ -1003,7 +1003,7 @@ export default function TyesAdmin() {
             };
             return [newUser, ...currentUsers];
           }
-          
+
           if (eventType === 'UPDATE') {
             return currentUsers.map(u => u.id === newRow.id ? {
               ...u,
@@ -1011,11 +1011,11 @@ export default function TyesAdmin() {
               name: `${newRow.first_name || ''} ${newRow.last_name || ''}`.trim() || newRow.email
             } : u);
           }
-          
+
           if (eventType === 'DELETE') {
             return currentUsers.filter(u => u.id !== oldRow.id);
           }
-          
+
           return currentUsers;
         });
       })
