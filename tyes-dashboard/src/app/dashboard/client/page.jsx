@@ -460,23 +460,31 @@ export default function TyesClient() {
                   {o.items && o.items.length > 0 ? (
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 8 }}>
                       {o.items.map((item, i) => (
-                        <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", borderRadius: 10, background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.04)" }}>
-                          <div style={{ width: 36, height: 36, borderRadius: 8, background: "rgba(255,255,255,0.05)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                            <Image size={14} color="#6b7280" />
+                        <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", borderRadius: 12, background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.05)", transition: "all 0.2s" }}>
+                          <div style={{ width: 40, height: 40, borderRadius: 10, background: "rgba(255,255,255,0.06)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                            <Image size={16} color="#6b7280" />
                           </div>
-                          <div style={{ flex: 1 }}>
-                            <div style={{ fontSize: 12, color: "#e5e7eb", fontWeight: 500 }}>{item.name}</div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 13, color: "#fff", fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{item.name}</div>
+                            <div style={{ marginTop: 4 }}><StatusBadge status={item.status} /></div>
                           </div>
-                          <StatusBadge status={item.status} />
                           {item.status === "delivered" && item.finishImage && (
-                            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                              <div onClick={() => window.open(item.finishImage, '_blank')} style={{ width: 30, height: 30, borderRadius: 6, background: `url(${item.finishImage}) center/cover`, border: "1px solid rgba(16,185,129,0.3)", cursor: "pointer" }} />
-                              <button onClick={(e) => { e.stopPropagation(); handleDownloadItem(item.name, item.finishImage); }} style={{ background: "none", border: "none", color: "#4ecdc4", cursor: "pointer", padding: 2 }} title="Download"><Download size={13} /></button>
-                              <button onClick={(e) => { e.stopPropagation(); handleRequestRevision(o, i); }} style={{ background: "none", border: "none", color: "#fbbf24", cursor: "pointer", padding: 2 }} title="Request Revision"><RefreshCw size={13} /></button>
+                            <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
+                              <div
+                                onClick={() => window.open(item.finishImage, '_blank')}
+                                style={{ width: 36, height: 36, borderRadius: 8, background: `url(${item.finishImage}) center/cover`, border: "2px solid rgba(16,185,129,0.3)", cursor: "pointer", boxShadow: "0 4px 12px rgba(0,0,0,0.2)" }}
+                                title="Preview"
+                              />
+                              <div style={{ display: "flex", gap: 4 }}>
+                                <button onClick={(e) => { e.stopPropagation(); handleDownloadItem(item.name, item.finishImage); }} style={{ width: 28, height: 28, borderRadius: 6, background: "rgba(78,205,196,0.1)", border: "none", color: "#4ecdc4", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }} title="Download"><Download size={14} /></button>
+                                <button onClick={(e) => { e.stopPropagation(); handleRequestRevision(o, i); }} style={{ width: 28, height: 28, borderRadius: 6, background: "rgba(251,191,36,0.1)", border: "none", color: "#fbbf24", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }} title="Request Revision"><RefreshCw size={14} /></button>
+                              </div>
                             </div>
                           )}
                           {item.status === "revision" && (
-                            <button onClick={(e) => { e.stopPropagation(); setPage("messages"); }} style={{ background: "none", border: "none", color: "#fbbf24", cursor: "pointer", padding: 2 }}><MessageSquare size={13} /></button>
+                            <button onClick={(e) => { e.stopPropagation(); handleRequestRevision(o, i); }} style={{ padding: "6px 12px", borderRadius: 8, background: "rgba(251,191,36,0.1)", border: "1px solid rgba(251,191,36,0.2)", color: "#fbbf24", cursor: "pointer", fontSize: 11, fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
+                              <RefreshCw size={13} /> Reason
+                            </button>
                           )}
                         </div>
                       ))}
@@ -662,7 +670,7 @@ export default function TyesClient() {
 
     return (
       <div style={{ width: "100%", display: "flex", justifyContent: "center", paddingBottom: 40 }}>
-        <div style={{ width: "100%", maxWidth: 940 }}>
+        <div style={{ width: "100%", maxWidth: 1200 }}>
           <h1 style={{ fontSize: 24, fontWeight: 800, color: "#fff", margin: "0 0 8px" }}>New Order</h1>
           <p style={{ fontSize: 13, color: "#6b7280", margin: "0 0 32px" }}>Fill in your brief and we'll get started right away.</p>
 
@@ -803,7 +811,6 @@ export default function TyesClient() {
 
           <div style={{ display: "flex", gap: 10, marginTop: 32 }}>
             {step > 1 && <button onClick={() => setStep(step - 1)} style={{ padding: "12px 24px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.08)", background: "transparent", color: "#9ca3af", fontSize: 13, cursor: "pointer", minWidth: 100 }}>Back</button>}
-            <div style={{ flex: 1 }} />
             {step < 3 && <button onClick={() => { if (step === 1 && !plan) { addToast("Please select a plan first", "warning"); return; } setStep(step + 1); }} style={{ padding: "12px 24px", borderRadius: 10, border: "none", background: "linear-gradient(135deg,#4ecdc4,#2ab7a9)", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer", opacity: step === 1 && !plan ? 0.4 : 1, minWidth: 120 }}>Continue</button>}
             {step === 3 && <button onClick={handleSubmitOrder} disabled={isSubmitting} style={{ padding: "12px 32px", borderRadius: 10, border: "none", background: "linear-gradient(135deg,#4ecdc4,#2ab7a9)", color: "#fff", fontSize: 13, fontWeight: 700, cursor: isSubmitting ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, opacity: isSubmitting ? 0.7 : 1, minWidth: 160 }}>{isSubmitting ? <RefreshCw size={13} className="animate-spin" /> : <Send size={13} />} {isSubmitting ? "Submitting..." : "Submit Order"}</button>}
           </div>
@@ -939,7 +946,7 @@ export default function TyesClient() {
 
     return (
       <div style={{ width: "100%", display: "flex", justifyContent: "center", paddingBottom: 40 }}>
-        <div style={{ width: "100%", maxWidth: 940 }}>
+        <div style={{ width: "100%", maxWidth: 1200 }}>
           <h1 style={{ fontSize: 24, fontWeight: 800, color: "#fff", margin: "0 0 24px" }}>Account Settings</h1>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(380px, 1fr))", gap: 20 }}>
             <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 16, padding: 24 }}>
@@ -1133,6 +1140,7 @@ export default function TyesClient() {
               <textarea
                 placeholder="E.g. Please make the lighting warmer and increase the contrast on the product labels..."
                 id="revision-reason"
+                defaultValue={showRevisionModal.itemIndex !== null ? showRevisionModal.order.items[showRevisionModal.itemIndex]?.revisionReason || "" : ""}
                 style={{ width: "100%", height: 120, padding: 14, borderRadius: 12, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", color: "#fff", fontSize: 13, outline: "none", resize: "none", boxSizing: "border-box" }}
               />
             </div>
