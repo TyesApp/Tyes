@@ -175,7 +175,7 @@ export default function TyesClient() {
         .from('orders')
         .select('*')
         .eq('customer_email', authUser.email)
-        .order('created_at', { descending: true });
+        .order('created_at', { ascending: false });
 
       if (ordersData) {
         setOrders(ordersData.map(o => {
