@@ -65,21 +65,21 @@
     });
 
     // Auto-scroll logic to trigger scroll-linked animations automatically
-    (function() {
-      let scrollSpeed = 1.2; // Pixels per frame
-      
+    (function () {
+      let scrollSpeed = 4.2; // Pixels per frame
+
       function step() {
         // Move down
         window.scrollBy(0, scrollSpeed);
-        
+
         // If we hit the bottom, reset to top for an infinite loop effect
         if ((window.innerHeight + window.scrollY) >= document.body.offsetHeight - 2) {
           window.scrollTo(0, 0);
         }
-        
+
         requestAnimationFrame(step);
       }
-      
+
       // Start auto-scrolling after a short delay to let React render
       setTimeout(() => {
         requestAnimationFrame(step);

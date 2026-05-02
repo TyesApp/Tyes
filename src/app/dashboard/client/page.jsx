@@ -87,9 +87,11 @@ const SidebarItem = ({ icon: Icon, label, active, onClick, collapsed, badge }) =
   </button>
 );
 
-const InputField = ({ label, value, onChange, placeholder, type }) => (
+const InputField = ({ label, value, onChange, placeholder, type, required = false }) => (
   <div style={{ marginBottom: 14 }}>
-    <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#d1d5db", marginBottom: 6 }}>{label}</label>
+    <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#d1d5db", marginBottom: 6 }}>
+      {label} {required && <span style={{ color: "#ef4444" }}>*</span>}
+    </label>
     <input type={type || "text"} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} style={{ width: "100%", padding: "10px 14px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.03)", color: "#fff", fontSize: 13, outline: "none", boxSizing: "border-box" }} />
   </div>
 );
@@ -125,6 +127,8 @@ export default function TyesClient() {
     try {
       // 1. Get User
       const { data: { user: authUser } } = await supabase.auth.getUser();
+      console.log("Current Auth User:", authUser?.id, authUser?.email);
+
       if (!authUser) {
         router.push("/auth");
         return;
@@ -136,7 +140,7 @@ export default function TyesClient() {
         .from('profiles')
         .select('*')
         .eq('id', authUser.id)
-        .single();
+        .maybeSingle();
 
       if (profile) {
         const fullName = `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || profile.email;
@@ -152,14 +156,31 @@ export default function TyesClient() {
         });
         setCompanyName(fullName);
         setCompanyEmail(profile.email);
+      } else {
+        const fullName = authUser.user_metadata?.first_name
+          ? `${authUser.user_metadata.first_name} ${authUser.user_metadata.last_name || ''}`.trim()
+          : authUser.email;
 
-        // Load preferences from user_metadata or fallback to profile
-        const metadataPrefs = authUser.user_metadata?.preferences;
-        if (metadataPrefs) {
-          setPrefs(prev => ({ ...prev, ...metadataPrefs }));
-        } else if (profile.preferences) {
-          setPrefs(prev => ({ ...prev, ...profile.preferences }));
-        }
+        setClientInfo({
+          name: fullName,
+          email: authUser.email,
+          tier: "starter",
+          joined: "New Member",
+          totalOrders: 0,
+          totalSpent: 0,
+          imagesDelivered: 0,
+          freeTestUsed: false,
+        });
+        setCompanyName(fullName);
+        setCompanyEmail(authUser.email);
+      }
+
+      // Load preferences
+      const metadataPrefs = authUser.user_metadata?.preferences;
+      if (metadataPrefs) {
+        setPrefs(prev => ({ ...prev, ...metadataPrefs }));
+      } else if (profile && profile.preferences) {
+        setPrefs(prev => ({ ...prev, ...profile.preferences }));
       }
 
       // 3. Fetch Plans
@@ -170,18 +191,24 @@ export default function TyesClient() {
         .order('price', { ascending: true });
       if (plansData) setPricingPlans(plansData);
 
+      console.log("User ID:", authUser.id);
+      console.log("User Email:", authUser.email);
       // 4. Fetch Orders
-      const { data: ordersData } = await supabase
+      const { data: ordersData, error: ordersError } = await supabase
         .from('orders')
         .select('*')
-        .eq('customer_email', authUser.email)
+        .or(`user_id.eq.${authUser.id},customer_email.eq.${authUser.email}`)
         .order('created_at', { ascending: false });
+
+      console.log("Fetched Orders for", ordersData, ordersError);
+      if (ordersError) {
+        console.error("Orders Fetch Error:", ordersError);
+        addToast(`Orders error: ${ordersError.message}`, "error");
+      }
 
       if (ordersData) {
         setOrders(ordersData.map(o => {
           let items = o.items || [];
-
-          // Fallback: If items is empty but attachments has photos, use those
           if (items.length === 0 && o.attachments && o.attachments.photos) {
             items = o.attachments.photos.map((url, idx) => ({
               name: `Product Photo ${idx + 1}`,
@@ -192,11 +219,9 @@ export default function TyesClient() {
           }
 
           let derivedStatus = o.status || "pending";
-
           if (items.length > 0) {
             const allDelivered = items.every(i => i.status === "delivered" || i.status === "completed");
             const anyRevision = items.some(i => i.status === "revision");
-
             if (allDelivered) derivedStatus = "delivered";
             else if (anyRevision) derivedStatus = "revision";
             else if (items.some(i => i.status === "in_progress")) derivedStatus = "in_progress";
@@ -216,7 +241,6 @@ export default function TyesClient() {
           };
         }));
       }
-
     } catch (err) {
       console.error("Error fetching dashboard data:", err);
     } finally {
@@ -563,6 +587,8 @@ export default function TyesClient() {
     const [briefDesc, setBriefDesc] = useState("");
     const [selectedStyles, setSelectedStyles] = useState([]);
     const [productPhotos, setProductPhotos] = useState([]);
+    const [referencePhotos, setReferencePhotos] = useState([]);
+    const [fontFiles, setFontFiles] = useState([]);
     const [documentFiles, setDocumentFiles] = useState([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -582,49 +608,58 @@ export default function TyesClient() {
       for (const file of files) {
         const formData = new FormData();
         formData.append("file", file);
-        formData.append("upload_preset", "tyes_uploads");
+        formData.append("upload_preset", process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || "tyes_preset");
         try {
-          const res = await fetch(`https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/image/upload`, {
+          const res = await fetch(`https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/auto/upload`, {
             method: "POST",
             body: formData,
           });
           const data = await res.json();
-          if (data.secure_url) urls.push(data.secure_url);
+          if (res.ok && data.secure_url) {
+            urls.push(data.secure_url);
+          } else {
+            console.error("Cloudinary upload failed:", data);
+            throw new Error(data.error?.message || "Upload failed");
+          }
         } catch (err) {
           console.error("Cloudinary error:", err);
+          throw err;
         }
       }
       return urls;
     };
 
     const handleSubmitOrder = async () => {
-      if (productPhotos.length === 0) {
-        addToast("Please upload at least one product photo", "warning");
-        return;
-      }
-
+      if (isSubmitting) return;
       setIsSubmitting(true);
       try {
-        const selectedPlan = plans.find(p => p.id === plan);
-        let photoUrls = [];
-        let docUrls = [];
+        const { data: { user: currentUser } } = await supabase.auth.getUser();
+        if (!currentUser) throw new Error("Please sign in to place an order.");
 
-        // 1. Upload files if Cloudinary is configured
+        const selectedPlan = plans.find(p => p.id === plan);
+        if (!selectedPlan) throw new Error("Please select a plan first.");
+
+        let photoUrls = [];
+        let refUrls = [];
+        let fontUrls = [];
+
+        // 1. Upload files separately
         if (process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME) {
           if (productPhotos.length > 0) {
-            addToast(`Uploading ${productPhotos.length} photos...`, "info");
+            addToast(`Uploading ${productPhotos.length} product photos...`, "info");
             photoUrls = await uploadToCloudinary(productPhotos);
           }
-          if (documentFiles.length > 0) {
-            addToast(`Uploading ${documentFiles.length} documents...`, "info");
-            docUrls = await uploadToCloudinary(documentFiles);
+          if (referencePhotos.length > 0) {
+            addToast(`Uploading ${referencePhotos.length} reference images...`, "info");
+            refUrls = await uploadToCloudinary(referencePhotos);
+          }
+          if (fontFiles.length > 0) {
+            addToast(`Uploading ${fontFiles.length} fonts/labels...`, "info");
+            fontUrls = await uploadToCloudinary(fontFiles);
           }
         }
 
-        // 2. Save order to Supabase
-        const orderId = `ORD-${Math.floor(100000 + Math.random() * 900000)}`;
-        const actualImagesCount = selectedPlan.images || 0;
-
+        // 2. Map Items
         const structuredItems = productPhotos.map((file, index) => ({
           name: file.name,
           mainImage: photoUrls[index] || "",
@@ -632,33 +667,33 @@ export default function TyesClient() {
           status: "pending"
         }));
 
-        const { error } = await supabase
-          .from('orders')
-          .insert([{
-            id: orderId,
-            title: projectTitle || `New ${selectedPlan.name} Order`,
-            plan: selectedPlan.name,
-            images_count: actualImagesCount,
-            status: "pending",
-            category: "General",
-            revenue: selectedPlan.price || 0,
-            revisions: 0,
-            max_revisions: selectedPlan.max_revisions || 3,
-            progress: 0,
-            customer_email: user.email,
-            customer_name: clientInfo.name,
-            user_id: user.id,
-            attachments: { photos: photoUrls, status: "pending" },
-            documents: docUrls,
-            items: structuredItems,
-            brief_description: briefDesc,
-            selected_styles: selectedStyles
-          }]);
+        // 3. Insert into Database
+        const { error: insertError } = await supabase.from("orders").insert([{
+          user_id: currentUser.id,
+          customer_email: currentUser.email,
+          customer_name: clientInfo.name || currentUser.user_metadata?.first_name || "Client",
+          title: projectTitle || `New ${selectedPlan.name} Order`,
+          plan: selectedPlan.name,
+          images_count: selectedPlan.images || 0,
+          status: "pending",
+          revenue: selectedPlan.price || 0,
+          revisions: 0,
+          max_revisions: selectedPlan.max_revisions || 3,
+          progress: 0,
+          attachments: { photos: photoUrls },
+          reference_images: refUrls,
+          font_label_files: fontUrls,
+          items: structuredItems,
+          brief_description: briefDesc,
+          selected_styles: selectedStyles,
+          created_at: new Date().toISOString()
+        }]);
 
-        if (error) throw error;
+        if (insertError) throw insertError;
 
         addToast("Order submitted successfully!", "success");
         fetchData();
+        setStep(1);
         setPage("orders");
       } catch (err) {
         console.error("Submission error:", err);
@@ -709,9 +744,9 @@ export default function TyesClient() {
 
           {step === 2 && (
             <div style={{ width: "100%" }}>
-              <InputField label="Project Title" value={projectTitle} onChange={setProjectTitle} placeholder="e.g. Summer Skincare Launch" />
+              <InputField label="Project Title" value={projectTitle} onChange={setProjectTitle} placeholder="e.g. Summer Skincare Launch" required={true} />
               <div style={{ marginBottom: 20 }}>
-                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#d1d5db", marginBottom: 6 }}>Brief / Mood Description</label>
+                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#d1d5db", marginBottom: 6 }}>Brief / Mood Description <span style={{ color: "#ef4444" }}>*</span></label>
                 <textarea value={briefDesc} onChange={e => setBriefDesc(e.target.value)} placeholder="Describe the mood, style, angles you want..." rows={4} style={{ width: "100%", padding: "10px 14px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.03)", color: "#fff", fontSize: 13, outline: "none", resize: "vertical", fontFamily: "inherit", boxSizing: "border-box" }} />
               </div>
               <div style={{ marginBottom: 20 }}>
@@ -722,63 +757,71 @@ export default function TyesClient() {
                   ))}
                 </div>
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 20, marginBottom: 20 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 20, marginBottom: 20 }}>
                 {/* Product Photos */}
                 <div>
-                  <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#d1d5db", marginBottom: 6 }}>Product Photos</label>
+                  <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#d1d5db", marginBottom: 6 }}>Product Photos <span style={{color: "#ef4444"}}>*</span></label>
                   <div onClick={() => document.getElementById('photoInput').click()}
-                    style={{
-                      display: "grid", justifyItems: "center",
-                      border: "2px dashed rgba(255,255,255,0.08)", borderRadius: 12, padding: "24px 12px", textAlign: "center", cursor: "pointer", transition: "all 0.2s", background: "rgba(255,255,255,0.01)"
-                    }} onMouseEnter={e => e.currentTarget.style.borderColor = "rgba(78,205,196,0.3)"} onMouseLeave={e => e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)"}>
+                    style={{ display: "grid", justifyItems: "center", border: "2px dashed rgba(255,255,255,0.08)", borderRadius: 12, padding: "24px 12px", textAlign: "center", cursor: "pointer", transition: "all 0.2s", background: "rgba(255,255,255,0.01)" }}>
                     <input type="file" id="photoInput" multiple accept="image/*" style={{ display: "none" }} onChange={e => {
                       const selectedPlan = plans.find(p => p.id === plan);
                       const limit = selectedPlan ? selectedPlan.images : 0;
                       const newFiles = Array.from(e.target.files);
-                      const totalAfterAddition = productPhotos.length + newFiles.length;
-
-                      if (totalAfterAddition > limit) {
-                        const remainingSlots = limit - productPhotos.length;
-                        if (remainingSlots <= 0) {
-                          addToast(`You have already reached the limit of ${limit} photos for this plan.`, "warning");
-                        } else {
-                          addToast(`You can only add ${remainingSlots} more photo(s). Your current selection exceeds the plan limit.`, "warning");
-                        }
+                      if (productPhotos.length + newFiles.length > limit) {
+                        addToast(`Plan limit: ${limit} photos`, "warning");
                         return;
                       }
                       setProductPhotos(prev => [...prev, ...newFiles]);
                     }} />
-                    <Camera size={24} color="#4ecdc4" style={{ marginBottom: 8 }} />
-                    <div style={{ fontSize: 13, color: "#e5e7eb", fontWeight: 600 }}>Add Photos</div>
-                    <div style={{ fontSize: 11, color: "#4b5563", marginTop: 4 }}>Max {plans.find(p => p.id === plan)?.images || 0} photos</div>
+                    <Camera size={20} color="#4ecdc4" style={{ marginBottom: 8 }} />
+                    <div style={{ fontSize: 12, color: "#e5e7eb", fontWeight: 600 }}>Main Products</div>
+                    <div style={{ fontSize: 10, color: "#4b5563", marginTop: 4 }}>Required</div>
                   </div>
-                  <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 6 }}>
+                  <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 4 }}>
                     {productPhotos.map((f, i) => (
-                      <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 12px", background: "rgba(255,255,255,0.03)", borderRadius: 8, fontSize: 12 }}>
-                        <Image size={12} color="#6b7280" />
+                      <div key={i} style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 10px", background: "rgba(255,255,255,0.03)", borderRadius: 6, fontSize: 11 }}>
                         <span style={{ flex: 1, color: "#d1d5db", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{f.name}</span>
-                        <button onClick={() => removeFile('photo', i)} style={{ background: "none", border: "none", color: "#ef4444", cursor: "pointer", padding: 2 }}><X size={14} /></button>
+                        <button onClick={() => setProductPhotos(prev => prev.filter((_, idx) => idx !== i))} style={{ background: "none", border: "none", color: "#ef4444", cursor: "pointer" }}><X size={12} /></button>
                       </div>
                     ))}
                   </div>
                 </div>
 
-                {/* Documents */}
+                {/* Reference Images */}
                 <div>
-                  <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#d1d5db", marginBottom: 6 }}>Documents / Briefs</label>
-                  <div onClick={() => document.getElementById('docInput').click()}
-                    style={{ display: "grid", justifyItems: "center", border: "2px dashed rgba(255,255,255,0.08)", borderRadius: 12, padding: "24px 12px", textAlign: "center", cursor: "pointer", transition: "all 0.2s", background: "rgba(255,255,255,0.01)" }} onMouseEnter={e => e.currentTarget.style.borderColor = "rgba(78,205,196,0.3)"} onMouseLeave={e => e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)"}>
-                    <input type="file" id="docInput" multiple style={{ display: "none" }} onChange={e => setDocumentFiles(prev => [...prev, ...Array.from(e.target.files)])} />
-                    <FileText size={24} color="#4ecdc4" style={{ marginBottom: 8 }} />
-                    <div style={{ fontSize: 13, color: "#e5e7eb", fontWeight: 600 }}>Add Documents</div>
-                    <div style={{ fontSize: 11, color: "#4b5563", marginTop: 4 }}>PDF, DOCX, etc.</div>
+                  <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#d1d5db", marginBottom: 6 }}>Reference Images</label>
+                  <div onClick={() => document.getElementById('refInput').click()}
+                    style={{ display: "grid", justifyItems: "center", border: "2px dashed rgba(255,255,255,0.08)", borderRadius: 12, padding: "24px 12px", textAlign: "center", cursor: "pointer", transition: "all 0.2s", background: "rgba(255,255,255,0.01)" }}>
+                    <input type="file" id="refInput" multiple accept="image/*" style={{ display: "none" }} onChange={e => setReferencePhotos(prev => [...prev, ...Array.from(e.target.files)])} />
+                    <Image size={20} color="#4ecdc4" style={{ marginBottom: 8 }} />
+                    <div style={{ fontSize: 12, color: "#e5e7eb", fontWeight: 600 }}>Style References</div>
+                    <div style={{ fontSize: 10, color: "#4b5563", marginTop: 4 }}>Mood, angles, etc.</div>
                   </div>
-                  <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 6 }}>
-                    {documentFiles.map((f, i) => (
-                      <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 12px", background: "rgba(255,255,255,0.03)", borderRadius: 8, fontSize: 12 }}>
-                        <FileText size={12} color="#6b7280" />
+                  <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 4 }}>
+                    {referencePhotos.map((f, i) => (
+                      <div key={i} style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 10px", background: "rgba(255,255,255,0.03)", borderRadius: 6, fontSize: 11 }}>
                         <span style={{ flex: 1, color: "#d1d5db", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{f.name}</span>
-                        <button onClick={() => removeFile('doc', i)} style={{ background: "none", border: "none", color: "#ef4444", cursor: "pointer", padding: 2 }}><X size={14} /></button>
+                        <button onClick={() => setReferencePhotos(prev => prev.filter((_, idx) => idx !== i))} style={{ background: "none", border: "none", color: "#ef4444", cursor: "pointer" }}><X size={12} /></button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Fonts / Label */}
+                <div>
+                  <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#d1d5db", marginBottom: 6 }}>Fonts / Label</label>
+                  <div onClick={() => document.getElementById('fontInput').click()}
+                    style={{ display: "grid", justifyItems: "center", border: "2px dashed rgba(255,255,255,0.08)", borderRadius: 12, padding: "24px 12px", textAlign: "center", cursor: "pointer", transition: "all 0.2s", background: "rgba(255,255,255,0.01)" }}>
+                    <input type="file" id="fontInput" multiple style={{ display: "none" }} onChange={e => setFontFiles(prev => [...prev, ...Array.from(e.target.files)])} />
+                    <FileText size={20} color="#4ecdc4" style={{ marginBottom: 8 }} />
+                    <div style={{ fontSize: 12, color: "#e5e7eb", fontWeight: 600 }}>Label Files</div>
+                    <div style={{ fontSize: 10, color: "#4b5563", marginTop: 4 }}>PDF, PNG, OTF, etc.</div>
+                  </div>
+                  <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 4 }}>
+                    {fontFiles.map((f, i) => (
+                      <div key={i} style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 10px", background: "rgba(255,255,255,0.03)", borderRadius: 6, fontSize: 11 }}>
+                        <span style={{ flex: 1, color: "#d1d5db", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{f.name}</span>
+                        <button onClick={() => setFontFiles(prev => prev.filter((_, idx) => idx !== i))} style={{ background: "none", border: "none", color: "#ef4444", cursor: "pointer" }}><X size={12} /></button>
                       </div>
                     ))}
                   </div>
@@ -795,8 +838,9 @@ export default function TyesClient() {
                 { label: "Project", val: projectTitle || "Untitled" },
                 { label: "Images", val: plans.find(p => p.id === plan)?.images || 0 },
                 { label: "Style", val: selectedStyles.join(", ") || "Not specified" },
-                { label: "Photos", val: `${productPhotos.length} selected` },
-                { label: "Documents", val: `${documentFiles.length} selected` },
+                { label: "Product Photos", val: `${productPhotos.length} files` },
+                { label: "Ref. Images", val: `${referencePhotos.length} files` },
+                { label: "Fonts / Labels", val: `${fontFiles.length} files` },
                 { label: "Revisions", val: "3 included" },
               ].map((r, i) => (
                 <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid rgba(255,255,255,0.04)", fontSize: 14 }}>
@@ -811,7 +855,31 @@ export default function TyesClient() {
 
           <div style={{ display: "flex", gap: 10, marginTop: 32 }}>
             {step > 1 && <button onClick={() => setStep(step - 1)} style={{ padding: "12px 24px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.08)", background: "transparent", color: "#9ca3af", fontSize: 13, cursor: "pointer", minWidth: 100 }}>Back</button>}
-            {step < 3 && <button onClick={() => { if (step === 1 && !plan) { addToast("Please select a plan first", "warning"); return; } setStep(step + 1); }} style={{ padding: "12px 24px", borderRadius: 10, border: "none", background: "linear-gradient(135deg,#4ecdc4,#2ab7a9)", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer", opacity: step === 1 && !plan ? 0.4 : 1, minWidth: 120 }}>Continue</button>}
+            {step < 3 && (
+              <button 
+                onClick={() => { 
+                  if (step === 1 && !plan) return; 
+                  if (step === 2) {
+                    if (!projectTitle.trim() || !briefDesc.trim() || productPhotos.length === 0) return;
+                  }
+                  setStep(step + 1); 
+                }} 
+                disabled={(step === 1 && !plan) || (step === 2 && (!projectTitle.trim() || !briefDesc.trim() || productPhotos.length === 0))}
+                style={{ 
+                  padding: "12px 24px", 
+                  borderRadius: 10, 
+                  border: "none", 
+                  background: ((step === 1 && !plan) || (step === 2 && (!projectTitle.trim() || !briefDesc.trim() || productPhotos.length === 0))) ? "rgba(255,255,255,0.06)" : "linear-gradient(135deg,#4ecdc4,#2ab7a9)", 
+                  color: ((step === 1 && !plan) || (step === 2 && (!projectTitle.trim() || !briefDesc.trim() || productPhotos.length === 0))) ? "#4b5563" : "#fff", 
+                  fontSize: 13, 
+                  fontWeight: 600, 
+                  cursor: ((step === 1 && !plan) || (step === 2 && (!projectTitle.trim() || !briefDesc.trim() || productPhotos.length === 0))) ? "not-allowed" : "pointer", 
+                  minWidth: 120,
+                  transition: "all 0.3s ease"
+                }}>
+                Continue
+              </button>
+            )}
             {step === 3 && <button onClick={handleSubmitOrder} disabled={isSubmitting} style={{ padding: "12px 32px", borderRadius: 10, border: "none", background: "linear-gradient(135deg,#4ecdc4,#2ab7a9)", color: "#fff", fontSize: 13, fontWeight: 700, cursor: isSubmitting ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, opacity: isSubmitting ? 0.7 : 1, minWidth: 160 }}>{isSubmitting ? <RefreshCw size={13} className="animate-spin" /> : <Send size={13} />} {isSubmitting ? "Submitting..." : "Submit Order"}</button>}
           </div>
         </div>
@@ -1089,25 +1157,84 @@ export default function TyesClient() {
       </Modal>
 
       {/* Order Detail Modal */}
-      <Modal open={!!showOrderDetailModal} onClose={() => setShowOrderDetailModal(null)} title={showOrderDetailModal ? `Order ${showOrderDetailModal.id}` : ""} width={520}>
+      <Modal open={!!showOrderDetailModal} onClose={() => setShowOrderDetailModal(null)} title={showOrderDetailModal ? `Order ${showOrderDetailModal.id}` : ""} width={600}>
         {showOrderDetailModal && (
-          <div>
-            <h4 style={{ color: "#fff", fontSize: 15, fontWeight: 600, margin: "0 0 12px" }}>{showOrderDetailModal.title}</h4>
-            {[
-              { label: "Plan", val: showOrderDetailModal.plan },
-              { label: "Images", val: showOrderDetailModal.images },
-              { label: "Category", val: showOrderDetailModal.category },
-              { label: "Date", val: showOrderDetailModal.date },
-              { label: "Revenue", val: `$${showOrderDetailModal.revenue}` },
-              { label: "Revisions Used", val: `${showOrderDetailModal.revisions}/${showOrderDetailModal.maxRevisions}` },
-              { label: "Progress", val: `${showOrderDetailModal.progress}%` },
-            ].map((r, i) => (
-              <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: "1px solid rgba(255,255,255,0.04)", fontSize: 13 }}>
-                <span style={{ color: "#6b7280" }}>{r.label}</span>
-                <span style={{ color: "#e5e7eb", fontWeight: 500 }}>{r.val}</span>
+          <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+            <div>
+              <h4 style={{ color: "#fff", fontSize: 17, fontWeight: 700, margin: "0 0 4px" }}>{showOrderDetailModal.title}</h4>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}><StatusBadge status={showOrderDetailModal.status} /></div>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, background: "rgba(255,255,255,0.02)", padding: 16, borderRadius: 12, border: "1px solid rgba(255,255,255,0.05)" }}>
+              {[
+                { label: "Plan", val: showOrderDetailModal.plan },
+                { label: "Images", val: showOrderDetailModal.images },
+                { label: "Revenue", val: `$${showOrderDetailModal.revenue}` },
+                { label: "Date", val: showOrderDetailModal.date },
+                { label: "Revisions", val: `${showOrderDetailModal.revisions}/${showOrderDetailModal.maxRevisions}` },
+                { label: "Progress", val: `${showOrderDetailModal.progress}%` },
+              ].map((r, i) => (
+                <div key={i}>
+                  <div style={{ fontSize: 11, color: "#6b7280", fontWeight: 600, textTransform: "uppercase", marginBottom: 2 }}>{r.label}</div>
+                  <div style={{ fontSize: 14, color: "#fff", fontWeight: 500 }}>{r.val}</div>
+                </div>
+              ))}
+            </div>
+
+            {showOrderDetailModal.brief_description && (
+              <div>
+                <div style={{ fontSize: 11, color: "#6b7280", fontWeight: 600, textTransform: "uppercase", marginBottom: 8 }}>Brief Description</div>
+                <div style={{ background: "rgba(255,255,255,0.03)", padding: 14, borderRadius: 10, fontSize: 13, color: "#d1d5db", lineHeight: 1.6, border: "1px solid rgba(255,255,255,0.05)", maxHeight: 150, overflowY: "auto" }}>
+                  {showOrderDetailModal.brief_description}
+                </div>
               </div>
-            ))}
-            <div style={{ marginTop: 12 }}><StatusBadge status={showOrderDetailModal.status} /></div>
+            )}
+
+            {showOrderDetailModal.selected_styles && showOrderDetailModal.selected_styles.length > 0 && (
+              <div>
+                <div style={{ fontSize: 11, color: "#6b7280", fontWeight: 600, textTransform: "uppercase", marginBottom: 8 }}>Selected Styles</div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                  {showOrderDetailModal.selected_styles.map(s => (
+                    <span key={s} style={{ padding: "4px 10px", borderRadius: 20, background: "rgba(78,205,196,0.1)", color: "#4ecdc4", fontSize: 11, fontWeight: 500 }}>{s}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div>
+              <div style={{ fontSize: 11, color: "#6b7280", fontWeight: 600, textTransform: "uppercase", marginBottom: 8 }}>Product Photos</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                {showOrderDetailModal.attachments?.photos?.length > 0 ? showOrderDetailModal.attachments.photos.map((url, i) => (
+                  <a key={i} href={url} target="_blank" rel="noreferrer" style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", background: "rgba(255,255,255,0.03)", borderRadius: 8, color: "#fff", fontSize: 12, textDecoration: "none", border: "1px solid rgba(255,255,255,0.05)" }}>
+                    <Camera size={14} color="#6b7280" /> <span>Product Image {i + 1}</span>
+                  </a>
+                )) : <div style={{ fontSize: 12, color: "#4b5563" }}>None</div>}
+              </div>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
+              <div>
+                <div style={{ fontSize: 11, color: "#6b7280", fontWeight: 600, textTransform: "uppercase", marginBottom: 8 }}>Reference Images</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  {showOrderDetailModal.reference_images?.length > 0 ? showOrderDetailModal.reference_images.map((url, i) => (
+                    <a key={i} href={url} target="_blank" rel="noreferrer" style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", background: "rgba(255,255,255,0.03)", borderRadius: 8, color: "#4ecdc4", fontSize: 12, textDecoration: "none", border: "1px solid rgba(255,255,255,0.05)" }}>
+                      <Image size={14} /> <span>Reference {i + 1}</span>
+                    </a>
+                  )) : <div style={{ fontSize: 12, color: "#4b5563" }}>None</div>}
+                </div>
+              </div>
+
+              <div>
+                <div style={{ fontSize: 11, color: "#6b7280", fontWeight: 600, textTransform: "uppercase", marginBottom: 8 }}>Fonts / Labels</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  {showOrderDetailModal.font_label_files?.length > 0 ? showOrderDetailModal.font_label_files.map((url, i) => (
+                    <a key={i} href={url} target="_blank" rel="noreferrer" style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", background: "rgba(255,255,255,0.03)", borderRadius: 8, color: "#7dd8d0", fontSize: 12, textDecoration: "none", border: "1px solid rgba(255,255,255,0.05)" }}>
+                      <FileText size={14} /> <span>File {i + 1}</span>
+                    </a>
+                  )) : <div style={{ fontSize: 12, color: "#4b5563" }}>None</div>}
+                </div>
+              </div>
+            </div>
           </div>
         )}
       </Modal>

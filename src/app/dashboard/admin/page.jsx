@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
 import { LineChart, Line, BarChart, Bar, AreaChart, Area, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
-import { Search, Bell, ChevronDown, ChevronRight, Filter, Download, MoreVertical, Plus, Edit, Trash2, Eye, Check, X, Clock, RefreshCw, TrendingUp, TrendingDown, Users, ShoppingCart, DollarSign, Image, Settings, LogOut, Home, Package, CreditCard, BarChart2, UserCheck, Star, AlertCircle, ArrowUpRight, ArrowDownRight, Menu, ChevronLeft, Save, Mail, Globe, Zap, Shield, Key, Webhook, User, Upload } from "lucide-react";
+import { Search, Bell, ChevronDown, ChevronRight, Download, MoreVertical, Plus, Edit, Trash2, Eye, Check, X, Clock, RefreshCw, TrendingUp, TrendingDown, Users, ShoppingCart, DollarSign, Image, Settings, LogOut, Home, Package, CreditCard, BarChart2, UserCheck, Star, AlertCircle, ArrowUpRight, ArrowDownRight, Menu, ChevronLeft, Save, Mail, Globe, Zap, Shield, Key, Webhook, User, Upload } from "lucide-react";
 
 // TOAST NOTIFICATION SYSTEM
 const useToast = () => {
@@ -249,14 +249,16 @@ const OrdersPage = ({ orders, setOrders, toast, goTo, supabase }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
-  const filtered = orders.filter(o => {
-    if (filter !== "all" && o.status !== filter) return false;
-    const searchLow = search.toLowerCase();
-    const customerMatch = o.customer && o.customer.toLowerCase().includes(searchLow);
-    const idMatch = o.id && o.id.toString().toLowerCase().includes(searchLow);
-    if (search && !customerMatch && !idMatch) return false;
-    return true;
-  });
+  const filtered = orders
+    .filter(o => {
+      if (filter !== "all" && o.status !== filter) return false;
+      const searchLow = search.toLowerCase();
+      const customerMatch = o.customer && o.customer.toLowerCase().includes(searchLow);
+      const idMatch = o.id && o.id.toString().toLowerCase().includes(searchLow);
+      if (search && !customerMatch && !idMatch) return false;
+      return true;
+    })
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
   const totalPages = Math.ceil(filtered.length / itemsPerPage);
   const paginatedOrders = filtered.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
@@ -378,8 +380,67 @@ const OrdersPage = ({ orders, setOrders, toast, goTo, supabase }) => {
               <StatusBadge status={viewOrder.status} />
             </div>
             <div style={{ marginTop: 8 }}><div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}><span style={{ fontSize: 12, color: "#6b7280" }}>Progress</span><span style={{ fontSize: 12, color: "#fff", fontWeight: 600 }}>{viewOrder.progress}%</span></div><div style={{ height: 8, borderRadius: 4, background: "rgba(255,255,255,0.06)" }}><div style={{ width: `${viewOrder.progress}%`, height: "100%", borderRadius: 4, background: viewOrder.progress === 100 ? "#34d399" : "linear-gradient(90deg,#4ecdc4,#2ab7a9)" }} /></div></div>
+            
+            {(viewOrder.brief_description || viewOrder.mood_description) && (
+              <div style={{ marginTop: 16 }}>
+                <span style={{ fontSize: 11, color: "#6b7280", display: "block", marginBottom: 8, textTransform: "uppercase" }}>Brief / Description</span>
+                <div style={{ padding: 12, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 12, fontSize: 13, color: "#d1d5db", lineHeight: "1.6" }}>
+                  {viewOrder.brief_description || viewOrder.mood_description}
+                </div>
+              </div>
+            )}
+
+            {viewOrder.selected_styles && viewOrder.selected_styles.length > 0 && (
+              <div style={{ marginTop: 12 }}>
+                <span style={{ fontSize: 11, color: "#6b7280", display: "block", marginBottom: 8, textTransform: "uppercase" }}>Selected Styles</span>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                  {viewOrder.selected_styles.map((s, i) => (
+                    <span key={i} style={{ padding: "3px 10px", borderRadius: 20, background: "rgba(78,205,196,0.1)", color: "#4ecdc4", fontSize: 10, fontWeight: 600 }}>{s}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Reference Images */}
+            {((viewOrder.reference_images && viewOrder.reference_images.length > 0) || (viewOrder.attachments?.reference_images && viewOrder.attachments.reference_images.length > 0)) && (
+              <div style={{ marginTop: 16 }}>
+                <span style={{ fontSize: 11, color: "#6b7280", display: "block", marginBottom: 8, textTransform: "uppercase" }}>Reference Images</span>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                  {(viewOrder.reference_images || viewOrder.attachments?.reference_images || []).map((url, i) => (
+                    <div key={i} onClick={() => window.open(url, '_blank')} style={{ width: 80, height: 80, borderRadius: 10, background: `url(${url}) center/cover`, border: "1px solid rgba(255,255,255,0.1)", cursor: "pointer" }} />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Fonts / Labels */}
+            {((viewOrder.font_label_files && viewOrder.font_label_files.length > 0) || (viewOrder.attachments?.fonts_labels && viewOrder.attachments.fonts_labels.length > 0)) && (
+              <div style={{ marginTop: 16 }}>
+                <span style={{ fontSize: 11, color: "#6b7280", display: "block", marginBottom: 8, textTransform: "uppercase" }}>Fonts / Labels</span>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                  {(viewOrder.font_label_files || viewOrder.attachments?.fonts_labels || []).map((url, i) => (
+                    <div key={i} onClick={() => window.open(url, '_blank')} style={{ width: 80, height: 80, borderRadius: 10, background: `url(${url}) center/cover`, border: "1px solid rgba(255,255,255,0.1)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
+                      {!url.match(/\.(jpg|jpeg|png|gif|webp)$/i) && <span style={{ fontSize: 10, color: "#6b7280" }}>File {i+1}</span>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Product Photos */}
+            {viewOrder.attachments?.photos && viewOrder.attachments.photos.length > 0 && (
+              <div style={{ marginTop: 16 }}>
+                <span style={{ fontSize: 11, color: "#6b7280", display: "block", marginBottom: 8, textTransform: "uppercase" }}>Original Product Photos</span>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                  {viewOrder.attachments.photos.map((url, i) => (
+                    <div key={i} onClick={() => window.open(url, '_blank')} style={{ width: 80, height: 80, borderRadius: 10, background: `url(${url}) center/cover`, border: "1px solid rgba(255,255,255,0.1)", cursor: "pointer" }} />
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
-              <span style={{ fontSize: 11, color: "#6b7280" }}>Change status:</span>
+              <span style={{ fontSize: 11, color: "#6b7280" }}>Quick Status:</span>
               {Object.keys(statusConfig).map(s => <button key={s} onClick={() => { updateStatus(viewOrder.id, s); setViewOrder({ ...viewOrder, status: s }); }} style={{ padding: "4px 10px", borderRadius: 16, border: `1px solid ${statusConfig[s].color}33`, background: viewOrder.status === s ? statusConfig[s].bg : "transparent", color: statusConfig[s].color, fontSize: 11, cursor: "pointer" }}>{statusConfig[s].label}</button>)}
             </div>
 
@@ -660,13 +721,13 @@ const UsersPage = ({ users, setUsers, toast, supabase }) => {
               <td style={{ padding: "12px 16px", fontSize: 11, color: "#6b7280" }}>{u.joined}</td>
               <td style={{ padding: "12px 16px" }}><span onClick={() => toggleStatus(u.id)} style={{ cursor: "pointer" }}><span style={{ width: 6, height: 6, borderRadius: "50%", display: "inline-block", background: u.status === "active" ? "#34d399" : "#4b5563", marginRight: 6 }} /><span style={{ fontSize: 11, color: u.status === "active" ? "#34d399" : "#6b7280" }}>{u.status}</span></span></td>
               <td style={{ padding: "12px 16px", position: "relative" }}>
-                 <button onClick={() => setMenuOpen(menuOpen === u.id ? null : u.id)} style={{ background: "none", border: "none", color: "#4b5563", cursor: "pointer", padding: 4 }}><MoreVertical size={14} /></button>
-                 {menuOpen === u.id && <Dropdown onClose={() => setMenuOpen(null)} up={idx > 4} items={[
-                   { icon: Eye, label: "View Profile", action: () => setViewUser(u) },
-                   { icon: Mail, label: "Send Email", action: () => toast(`Email draft opened for ${u.name}`, "info") },
-                   { divider: true },
-                   { icon: u.status === "active" ? X : Check, label: u.status === "active" ? "Block Client" : "Unblock Client", action: () => toggleStatus(u.id), danger: u.status === "active" },
-                 ]} />}
+                <button onClick={() => setMenuOpen(menuOpen === u.id ? null : u.id)} style={{ background: "none", border: "none", color: "#4b5563", cursor: "pointer", padding: 4 }}><MoreVertical size={14} /></button>
+                {menuOpen === u.id && <Dropdown onClose={() => setMenuOpen(null)} up={idx > 4} items={[
+                  { icon: Eye, label: "View Profile", action: () => setViewUser(u) },
+                  { icon: Mail, label: "Send Email", action: () => toast(`Email draft opened for ${u.name}`, "info") },
+                  { divider: true },
+                  { icon: u.status === "active" ? X : Check, label: u.status === "active" ? "Block Client" : "Unblock Client", action: () => toggleStatus(u.id), danger: u.status === "active" },
+                ]} />}
               </td>
             </tr>
           ))}</tbody>
@@ -870,16 +931,16 @@ const AnalyticsPage = ({ users, orders }) => {
 
   const deliveredOrders = orders.filter(o => o.status === 'delivered' || o.status === 'completed');
   const onTimeDelivery = orders.length ? (deliveredOrders.length / orders.length) * 100 : 0;
-  
+
   const revisionOrders = orders.filter(o => o.status === 'revision');
   const firstTimeApproval = orders.length ? ((orders.length - revisionOrders.length) / orders.length) * 100 : 0;
-  
+
   const clientsWithMultipleOrders = users.filter(u => u.orders > 1).length;
   const clientRetention = users.length ? (clientsWithMultipleOrders / users.length) * 100 : 0;
-  
+
   const totalRevenue = orders.reduce((acc, o) => acc + (o.revenue || 0), 0);
   const avgOrderValue = orders.length ? totalRevenue / orders.length : 0;
-  
+
   const pendingOrders = orders.filter(o => o.status === 'pending' || o.status === 'in_progress' || o.status === 'revision').length;
   const capacityUsed = Math.min(100, (pendingOrders / 20) * 100); // Assuming capacity of 20 active orders
 
