@@ -440,19 +440,21 @@ export default function TyesClient() {
               {[
                 { icon: Plus, label: "New Order", desc: "Start a new project", action: () => setPage("new-order") },
                 // { icon: MessageSquare, label: "Messages", desc: `${unreadMsgs} unread message${unreadMsgs !== 1 ? "s" : ""}`, action: () => setPage("messages") },
-                { icon: Download, label: "Download All", desc: "Latest delivered images", action: () => {
-                  const deliveredOrders = orders.filter(o => o.status === "delivered");
-                  if (deliveredOrders.length === 0) {
-                    addToast("No delivered orders found", "warning");
+                { icon: Download, label: "Download All", desc: "All delivered images", action: () => {
+                  const links = [];
+                  orders.forEach(o => {
+                    o.items?.forEach(i => {
+                      if ((i.status === "delivered" || i.status === "completed" || o.status === "delivered") && i.finishImage) {
+                        links.push(i.finishImage);
+                      }
+                    });
+                  });
+
+                  if (links.length === 0) {
+                    addToast("No delivered images found yet", "warning");
                     return;
                   }
-                  const latestOrder = deliveredOrders[0];
-                  const links = latestOrder.items.filter(i => i.finishImage).map(i => i.finishImage);
-                  if (links.length > 0) {
-                    downloadAsZip(links, `Tyes_Order_${latestOrder.id}.zip`);
-                  } else {
-                    addToast("No delivered images found in latest order", "warning");
-                  }
+                  downloadAsZip(links, `Tyes_All_Delivered_Images.zip`);
                 }},
                 { icon: FileText, label: "View Invoices", desc: `$${invoices.filter(i => i.status === "pending").reduce((s, i) => s + i.amount, 0)} pending`, action: () => setPage("invoices") },
               ].map((a, i) => (
