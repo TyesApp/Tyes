@@ -1200,9 +1200,9 @@ export default function TyesClient() {
 
   if (loading) {
     return (
-      <div style={{ background: "#050505", minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <div style={{ textAlign: "center" }}>
-          <RefreshCw size={32} className="animate-spin" style={{ color: "#4ecdc4", marginBottom: 12 }} />
+      <div style={{ background: "#050505", minHeight: "100vh", width: "100%", position: "fixed", inset: 0, zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div style={{ textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center" }}>
+          <RefreshCw size={32} className="animate-spin" style={{ color: "#4ecdc4", marginBottom: 16 }} />
           <div style={{ color: "#6b7280", fontSize: 14, fontWeight: 500 }}>Initializing your dashboard...</div>
         </div>
       </div>
