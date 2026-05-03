@@ -10,10 +10,10 @@ import { Search, Bell, ChevronDown, ChevronRight, ChevronLeft, Download, MoreVer
 // ══════════════════════════════════════
 const useToast = () => {
   const [toasts, setToasts] = useState([]);
-  const addToast = useCallback((message, type = "success") => {
+  const addToast = useCallback((message, type = "success", duration = 3000) => {
     const id = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     setToasts(t => [...t, { id, message, type }]);
-    setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), 3000);
+    setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), duration);
   }, []);
   return { toasts, addToast };
 };
@@ -657,7 +657,6 @@ export default function TyesClient() {
     const [fontFiles, setFontFiles] = useState([]);
     const [documentFiles, setDocumentFiles] = useState([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const [showOrderSuccessModal, setShowOrderSuccessModal] = useState(false);
 
     const plans = pricingPlans;
 
@@ -758,8 +757,10 @@ export default function TyesClient() {
 
         if (insertError) throw insertError;
 
+        addToast("Order submitted successfully! You will receive an email notification when your image(s) are ready. Stay tied up.", "success", 8000);
         fetchData();
-        setShowOrderSuccessModal(true);
+        setStep(1);
+        setPage("orders");
       } catch (err) {
         console.error("Submission error:", err);
         addToast(err.message || "Failed to submit order", "error");
@@ -770,20 +771,6 @@ export default function TyesClient() {
 
     return (
       <div style={{ width: "100%", display: "flex", justifyContent: "center", paddingBottom: 40 }}>
-        <Modal open={showOrderSuccessModal} onClose={() => { setShowOrderSuccessModal(false); setPage("orders"); }} title="Order Submitted" width={400}>
-          <div style={{ textAlign: "center", padding: "10px 0" }}>
-            <div style={{ background: "rgba(16,185,129,0.1)", width: 64, height: 64, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 20px" }}>
-              <Check size={32} color="#34d399" />
-            </div>
-            <h3 style={{ fontSize: 18, color: "#fff", fontWeight: 700, margin: "0 0 10px" }}>Order submitted successfully!</h3>
-            <p style={{ fontSize: 14, color: "#9ca3af", lineHeight: 1.5, margin: "0 0 24px" }}>
-              You will receive an email notification when your image(s) are ready. Stay tied up.
-            </p>
-            <button onClick={() => { setShowOrderSuccessModal(false); setPage("orders"); }} style={{ padding: "10px 24px", borderRadius: 10, border: "none", background: "linear-gradient(135deg,#4ecdc4,#2ab7a9)", color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer", width: "100%" }}>
-              Got it
-            </button>
-          </div>
-        </Modal>
         <div style={{ width: "100%", maxWidth: 1200 }}>
           <h1 style={{ fontSize: 24, fontWeight: 800, color: "#fff", margin: "0 0 8px" }}>New Order</h1>
           <p style={{ fontSize: 13, color: "#6b7280", margin: "0 0 32px" }}>Fill in your brief and we'll get started right away.</p>
