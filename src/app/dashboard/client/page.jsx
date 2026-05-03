@@ -309,6 +309,60 @@ export default function TyesClient() {
 
   const markNotifsRead = () => setNotifications(n => n.map(x => ({ ...x, read: true })));
 
+  const downloadAsZip = async (urlsToDownload, zipFilename) => {
+    if (!urlsToDownload || urlsToDownload.length === 0) {
+      addToast("No images found to download", "warning");
+      return;
+    }
+    
+    addToast("Preparing ZIP file... this may take a moment", "info");
+    
+    try {
+      const JSZip = (await import("jszip")).default;
+      const zip = new JSZip();
+      
+      const fetchPromises = urlsToDownload.map(async (url, index) => {
+        try {
+          const response = await fetch(url);
+          if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+          const blob = await response.blob();
+          
+          let filename = `image_${index + 1}.png`;
+          try {
+            const urlObj = new URL(url);
+            const pathParts = urlObj.pathname.split('/');
+            const lastPart = pathParts[pathParts.length - 1];
+            if (lastPart) {
+                const questionIndex = lastPart.indexOf('?');
+                filename = questionIndex !== -1 ? lastPart.substring(0, questionIndex) : lastPart;
+            }
+          } catch (e) {}
+          zip.file(filename, blob);
+        } catch (error) {
+          console.error(`Failed to load ${url}:`, error);
+          zip.file(`error_${index}.txt`, `Failed to download: \${url}\nError: \${error.message}`);
+        }
+      });
+      
+      await Promise.all(fetchPromises);
+      
+      const content = await zip.generateAsync({ type: "blob" });
+      const blobUrl = URL.createObjectURL(content);
+      const a = document.createElement("a");
+      a.href = blobUrl;
+      a.download = zipFilename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(blobUrl);
+      
+      addToast("ZIP download started successfully!", "success");
+    } catch (error) {
+      console.error("ZIP Generation Error:", error);
+      addToast("Failed to create ZIP file", "error");
+    }
+  };
+
   // ══════════════════════════════════════
   // OVERVIEW PAGE
   // ══════════════════════════════════════
@@ -385,8 +439,21 @@ export default function TyesClient() {
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {[
                 { icon: Plus, label: "New Order", desc: "Start a new project", action: () => setPage("new-order") },
-                { icon: MessageSquare, label: "Messages", desc: `${unreadMsgs} unread message${unreadMsgs !== 1 ? "s" : ""}`, action: () => setPage("messages") },
-                { icon: Download, label: "Download All", desc: "Latest delivered images", action: () => addToast("Downloading delivered images...", "info") },
+                // { icon: MessageSquare, label: "Messages", desc: `${unreadMsgs} unread message${unreadMsgs !== 1 ? "s" : ""}`, action: () => setPage("messages") },
+                { icon: Download, label: "Download All", desc: "Latest delivered images", action: () => {
+                  const deliveredOrders = orders.filter(o => o.status === "delivered");
+                  if (deliveredOrders.length === 0) {
+                    addToast("No delivered orders found", "warning");
+                    return;
+                  }
+                  const latestOrder = deliveredOrders[0];
+                  const links = latestOrder.items.filter(i => i.finishImage).map(i => i.finishImage);
+                  if (links.length > 0) {
+                    downloadAsZip(links, `Tyes_Order_${latestOrder.id}.zip`);
+                  } else {
+                    addToast("No delivered images found in latest order", "warning");
+                  }
+                }},
                 { icon: FileText, label: "View Invoices", desc: `$${invoices.filter(i => i.status === "pending").reduce((s, i) => s + i.amount, 0)} pending`, action: () => setPage("invoices") },
               ].map((a, i) => (
                 <div key={i} onClick={a.action} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", borderRadius: 10, background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.04)", cursor: "pointer", transition: "all 0.2s" }} onMouseEnter={e => e.currentTarget.style.borderColor = "rgba(78,205,196,0.2)"} onMouseLeave={e => e.currentTarget.style.borderColor = "rgba(255,255,255,0.04)"}>
@@ -423,10 +490,7 @@ export default function TyesClient() {
         addToast("No images delivered yet", "info");
         return;
       }
-      addToast(`Preparing ${links.length} images for download...`, "info");
-      links.forEach((url, i) => {
-        setTimeout(() => window.open(url, '_blank'), i * 200);
-      });
+      downloadAsZip(links, `Tyes_Order_${order.id}.zip`);
     };
 
     const handleDownloadItem = (name, url) => {
@@ -591,6 +655,7 @@ export default function TyesClient() {
     const [fontFiles, setFontFiles] = useState([]);
     const [documentFiles, setDocumentFiles] = useState([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [showOrderSuccessModal, setShowOrderSuccessModal] = useState(false);
 
     const plans = pricingPlans;
 
@@ -691,10 +756,8 @@ export default function TyesClient() {
 
         if (insertError) throw insertError;
 
-        addToast("Order submitted successfully!", "success");
         fetchData();
-        setStep(1);
-        setPage("orders");
+        setShowOrderSuccessModal(true);
       } catch (err) {
         console.error("Submission error:", err);
         addToast(err.message || "Failed to submit order", "error");
@@ -705,6 +768,20 @@ export default function TyesClient() {
 
     return (
       <div style={{ width: "100%", display: "flex", justifyContent: "center", paddingBottom: 40 }}>
+        <Modal open={showOrderSuccessModal} onClose={() => { setShowOrderSuccessModal(false); setPage("orders"); }} title="Order Submitted" width={400}>
+          <div style={{ textAlign: "center", padding: "10px 0" }}>
+            <div style={{ background: "rgba(16,185,129,0.1)", width: 64, height: 64, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 20px" }}>
+              <Check size={32} color="#34d399" />
+            </div>
+            <h3 style={{ fontSize: 18, color: "#fff", fontWeight: 700, margin: "0 0 10px" }}>Order submitted successfully!</h3>
+            <p style={{ fontSize: 14, color: "#9ca3af", lineHeight: 1.5, margin: "0 0 24px" }}>
+              You will receive an email notification when your image(s) are ready. Stay tied up.
+            </p>
+            <button onClick={() => { setShowOrderSuccessModal(false); setPage("orders"); }} style={{ padding: "10px 24px", borderRadius: 10, border: "none", background: "linear-gradient(135deg,#4ecdc4,#2ab7a9)", color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer", width: "100%" }}>
+              Got it
+            </button>
+          </div>
+        </Modal>
         <div style={{ width: "100%", maxWidth: 1200 }}>
           <h1 style={{ fontSize: 24, fontWeight: 800, color: "#fff", margin: "0 0 8px" }}>New Order</h1>
           <p style={{ fontSize: 13, color: "#6b7280", margin: "0 0 32px" }}>Fill in your brief and we'll get started right away.</p>
@@ -760,7 +837,7 @@ export default function TyesClient() {
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 20, marginBottom: 20 }}>
                 {/* Product Photos */}
                 <div>
-                  <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#d1d5db", marginBottom: 6 }}>Product Photos <span style={{color: "#ef4444"}}>*</span></label>
+                  <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#d1d5db", marginBottom: 6 }}>Product Photos <span style={{ color: "#ef4444" }}>*</span></label>
                   <div onClick={() => document.getElementById('photoInput').click()}
                     style={{ display: "grid", justifyItems: "center", border: "2px dashed rgba(255,255,255,0.08)", borderRadius: 12, padding: "24px 12px", textAlign: "center", cursor: "pointer", transition: "all 0.2s", background: "rgba(255,255,255,0.01)" }}>
                     <input type="file" id="photoInput" multiple accept="image/*" style={{ display: "none" }} onChange={e => {
@@ -856,24 +933,24 @@ export default function TyesClient() {
           <div style={{ display: "flex", gap: 10, marginTop: 32 }}>
             {step > 1 && <button onClick={() => setStep(step - 1)} style={{ padding: "12px 24px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.08)", background: "transparent", color: "#9ca3af", fontSize: 13, cursor: "pointer", minWidth: 100 }}>Back</button>}
             {step < 3 && (
-              <button 
-                onClick={() => { 
-                  if (step === 1 && !plan) return; 
+              <button
+                onClick={() => {
+                  if (step === 1 && !plan) return;
                   if (step === 2) {
                     if (!projectTitle.trim() || !briefDesc.trim() || productPhotos.length === 0) return;
                   }
-                  setStep(step + 1); 
-                }} 
+                  setStep(step + 1);
+                }}
                 disabled={(step === 1 && !plan) || (step === 2 && (!projectTitle.trim() || !briefDesc.trim() || productPhotos.length === 0))}
-                style={{ 
-                  padding: "12px 24px", 
-                  borderRadius: 10, 
-                  border: "none", 
-                  background: ((step === 1 && !plan) || (step === 2 && (!projectTitle.trim() || !briefDesc.trim() || productPhotos.length === 0))) ? "rgba(255,255,255,0.06)" : "linear-gradient(135deg,#4ecdc4,#2ab7a9)", 
-                  color: ((step === 1 && !plan) || (step === 2 && (!projectTitle.trim() || !briefDesc.trim() || productPhotos.length === 0))) ? "#4b5563" : "#fff", 
-                  fontSize: 13, 
-                  fontWeight: 600, 
-                  cursor: ((step === 1 && !plan) || (step === 2 && (!projectTitle.trim() || !briefDesc.trim() || productPhotos.length === 0))) ? "not-allowed" : "pointer", 
+                style={{
+                  padding: "12px 24px",
+                  borderRadius: 10,
+                  border: "none",
+                  background: ((step === 1 && !plan) || (step === 2 && (!projectTitle.trim() || !briefDesc.trim() || productPhotos.length === 0))) ? "rgba(255,255,255,0.06)" : "linear-gradient(135deg,#4ecdc4,#2ab7a9)",
+                  color: ((step === 1 && !plan) || (step === 2 && (!projectTitle.trim() || !briefDesc.trim() || productPhotos.length === 0))) ? "#4b5563" : "#fff",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: ((step === 1 && !plan) || (step === 2 && (!projectTitle.trim() || !briefDesc.trim() || productPhotos.length === 0))) ? "not-allowed" : "pointer",
                   minWidth: 120,
                   transition: "all 0.3s ease"
                 }}>
