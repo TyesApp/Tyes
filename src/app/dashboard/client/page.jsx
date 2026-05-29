@@ -4,6 +4,65 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
 import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { Search, Bell, ChevronDown, ChevronRight, ChevronLeft, Download, MoreVertical, Plus, Eye, Check, X, Clock, RefreshCw, Upload, Image, Settings, LogOut, Home, Package, CreditCard, FileText, MessageSquare, User, Camera, Paperclip, Send, Star, ArrowUpRight, Menu, AlertCircle, Zap, ExternalLink, Trash2, Edit, Save } from "lucide-react";
+import { loadStripe } from '@stripe/stripe-js';
+import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
+
+const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY);
+
+// ══════════════════════════════════════
+// CHECKOUT FORM (top-level for stable identity)
+// ══════════════════════════════════════
+const CheckoutForm = ({ onPaymentSuccess, stripeError }) => {
+  const stripe = useStripe();
+  const elements = useElements();
+  const [paying, setPaying] = useState(false);
+  const [payError, setPayError] = useState(null);
+
+  const handlePay = async () => {
+    if (!stripe || !elements || paying) return;
+    setPaying(true);
+    setPayError(null);
+    try {
+      const { error: submitErr } = await elements.submit();
+      if (submitErr) { setPayError(submitErr.message); return; }
+
+      const { error: confirmErr } = await stripe.confirmPayment({
+        elements,
+        confirmParams: { return_url: window.location.href },
+        redirect: "if_required",
+      });
+
+      if (confirmErr) { setPayError(confirmErr.message); return; }
+
+      // Payment confirmed — hand off to parent for uploads + DB insert
+      await onPaymentSuccess();
+    } catch (e) {
+      setPayError(e.message || "Payment failed");
+    } finally {
+      setPaying(false);
+    }
+  };
+
+  return (
+    <div>
+      <div style={{ marginTop: 4, marginBottom: 8 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: "#d1d5db", marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}>
+          <CreditCard size={14} color="#4ecdc4" /> Payment Details
+        </div>
+        <div style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, padding: 16 }}>
+          <PaymentElement options={{ layout: "tabs" }} />
+        </div>
+      </div>
+      {(stripeError || payError) && <div style={{ color: "#ef4444", fontSize: 12, marginTop: 8 }}>{payError || stripeError}</div>}
+      <button
+        onClick={handlePay}
+        disabled={paying || !stripe || !elements}
+        style={{ marginTop: 20, width: "100%", padding: "14px", borderRadius: 10, border: "none", background: paying ? "rgba(255,255,255,0.06)" : "linear-gradient(135deg,#4ecdc4,#2ab7a9)", color: paying ? "#4b5563" : "#fff", fontSize: 14, fontWeight: 700, cursor: paying ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, transition: "all 0.3s" }}>
+        {paying ? <><RefreshCw size={14} className="animate-spin" /> Processing...</> : <><Send size={14} /> Pay &amp; Submit Order</>}
+      </button>
+    </div>
+  );
+};
 
 // ══════════════════════════════════════
 // TOAST NOTIFICATION SYSTEM
@@ -250,7 +309,17 @@ export default function TyesClient() {
 
   useEffect(() => {
     fetchData();
-  }, [supabase]);
+
+    // Check for Stripe checkout session success
+    const query = new URLSearchParams(window.location.search);
+    if (query.get("session_id")) {
+      setTimeout(() => {
+        addToast("Payment successful! Your order is now processing.", "success", 5000);
+        // Clear the query string
+        router.replace("/dashboard/client", undefined, { shallow: true });
+      }, 1000);
+    }
+  }, [supabase, router, addToast]);
 
   const handleLogout = async () => {
     try {
@@ -534,7 +603,7 @@ export default function TyesClient() {
                   <span style={{ fontSize: 12, color: "#6b7280" }}>{o.plan} · {o.images} images · {o.date}</span>
                 </div>
                 <div style={{ textAlign: "right", marginRight: 12 }}>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: (o.revenue || 0) > 0 ? "#34d399" : "#6b7280" }}>{(o.revenue || 0) > 0 ? `$${o.revenue}` : "Free"}</div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: (o.revenue || 0) > 0 ? "#34d399" : "#6b7280" }}>{(o.revenue || 0) > 0 ? `Paid: $${o.revenue}` : "Free"}</div>
                   <div style={{ fontSize: 11, color: "#4b5563" }}>Rev {o.revisions}/{o.maxRevisions}</div>
                 </div>
                 <div style={{ width: 60 }}>
@@ -657,6 +726,8 @@ export default function TyesClient() {
     const [fontFiles, setFontFiles] = useState([]);
     const [documentFiles, setDocumentFiles] = useState([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [clientSecret, setClientSecret] = useState(null);
+    const [stripeError, setStripeError] = useState(null);
 
     const plans = pricingPlans;
 
@@ -695,7 +766,7 @@ export default function TyesClient() {
       return urls;
     };
 
-    const handleSubmitOrder = async () => {
+    const handleSubmitOrder = async (stripeObj, elementsObj) => {
       if (isSubmitting) return;
       setIsSubmitting(true);
       try {
@@ -705,11 +776,11 @@ export default function TyesClient() {
         const selectedPlan = plans.find(p => p.id === plan);
         if (!selectedPlan) throw new Error("Please select a plan first.");
 
+        // --- Upload files after payment confirmed (or for free orders) ---
         let photoUrls = [];
         let refUrls = [];
         let fontUrls = [];
 
-        // 1. Upload files separately
         if (process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME) {
           if (productPhotos.length > 0) {
             addToast(`Uploading ${productPhotos.length} product photos...`, "info");
@@ -725,7 +796,6 @@ export default function TyesClient() {
           }
         }
 
-        // 2. Map Items
         const structuredItems = productPhotos.map((file, index) => ({
           name: file.name,
           mainImage: photoUrls[index] || "",
@@ -733,7 +803,6 @@ export default function TyesClient() {
           status: "pending"
         }));
 
-        // 3. Insert into Database
         const { error: insertError } = await supabase.from("orders").insert([{
           user_id: currentUser.id,
           customer_email: currentUser.email,
@@ -757,7 +826,7 @@ export default function TyesClient() {
 
         if (insertError) throw insertError;
 
-        addToast("Order submitted successfully! You will receive an email notification when your image(s) are ready. Stay tied up.", "success", 8000);
+        addToast(selectedPlan.price > 0 ? "Payment successful! Your order is now processing." : "Order submitted! We'll notify you when your images are ready.", "success", 8000);
         fetchData();
         setStep(1);
         setPage("orders");
@@ -768,6 +837,7 @@ export default function TyesClient() {
         setIsSubmitting(false);
       }
     };
+
 
     return (
       <div style={{ width: "100%", display: "flex", justifyContent: "center", paddingBottom: 40 }}>
@@ -896,39 +966,93 @@ export default function TyesClient() {
             </div>
           )}
 
-          {step === 3 && (
-            <div style={{ width: "100%", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 16, padding: 24 }}>
-              <h3 style={{ fontSize: 16, fontWeight: 700, color: "#fff", margin: "0 0 16px" }}>Order Summary</h3>
-              {[
-                { label: "Plan", val: plans.find(p => p.id === plan)?.name || "—" },
-                { label: "Project", val: projectTitle || "Untitled" },
-                { label: "Images", val: plans.find(p => p.id === plan)?.images || 0 },
-                { label: "Style", val: selectedStyles.join(", ") || "Not specified" },
-                { label: "Product Photos", val: `${productPhotos.length} files` },
-                { label: "Ref. Images", val: `${referencePhotos.length} files` },
-                { label: "Fonts / Labels", val: `${fontFiles.length} files` },
-                { label: "Revisions", val: "3 included" },
-              ].map((r, i) => (
-                <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid rgba(255,255,255,0.04)", fontSize: 14 }}>
-                  <span style={{ color: "#9ca3af" }}>{r.label}</span><span style={{ color: "#fff", fontWeight: 500 }}>{r.val}</span>
+          {step === 3 && (() => {
+            const selectedPlan = plans.find(p => p.id === plan);
+            const isPaid = selectedPlan && selectedPlan.price > 0;
+            const orderSummary = [
+              { label: "Plan", val: selectedPlan?.name || "—" },
+              { label: "Project", val: projectTitle || "Untitled" },
+              { label: "Images", val: selectedPlan?.images || 0 },
+              { label: "Style", val: selectedStyles.join(", ") || "Not specified" },
+              { label: "Product Photos", val: `${productPhotos.length} files` },
+              { label: "Ref. Images", val: `${referencePhotos.length} files` },
+              { label: "Fonts / Labels", val: `${fontFiles.length} files` },
+              { label: "Revisions", val: "3 included" },
+            ];
+            return (
+              <div style={{ display: "grid", gridTemplateColumns: isPaid ? "1fr 1fr" : "1fr", gap: 24, width: "100%" }}>
+                {/* LEFT: Order Summary */}
+                <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 16, padding: 24 }}>
+                  <h3 style={{ fontSize: 16, fontWeight: 700, color: "#fff", margin: "0 0 16px" }}>Order Summary</h3>
+                  {orderSummary.map((r, i) => (
+                    <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid rgba(255,255,255,0.04)", fontSize: 14 }}>
+                      <span style={{ color: "#9ca3af" }}>{r.label}</span><span style={{ color: "#fff", fontWeight: 500 }}>{r.val}</span>
+                    </div>
+                  ))}
+                  <div style={{ display: "flex", justifyContent: "space-between", padding: "16px 0", fontSize: 20 }}>
+                    <span style={{ color: "#9ca3af", fontWeight: 600 }}>Total</span>
+                    <span style={{ color: isPaid ? "#4ecdc4" : "#34d399", fontWeight: 800 }}>{isPaid ? `$${selectedPlan.price}` : "Free"}</span>
+                  </div>
+                  {/* Free plan submit button */}
+                  {!isPaid && (
+                    <button
+                      onClick={() => handleSubmitOrder(null, null)}
+                      disabled={isSubmitting}
+                      style={{ width: "100%", padding: "14px", borderRadius: 10, border: "none", background: isSubmitting ? "rgba(255,255,255,0.06)" : "linear-gradient(135deg,#34d399,#10b981)", color: isSubmitting ? "#4b5563" : "#fff", fontSize: 14, fontWeight: 700, cursor: isSubmitting ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginTop: 8 }}>
+                      {isSubmitting ? <><RefreshCw size={14} className="animate-spin" /> Submitting...</> : <><Send size={14} /> Submit Order</>}
+                    </button>
+                  )}
                 </div>
-              ))}
-              <div style={{ display: "flex", justifyContent: "space-between", padding: "16px 0", fontSize: 20 }}>
-                <span style={{ color: "#9ca3af", fontWeight: 600 }}>Total</span><span style={{ color: "#4ecdc4", fontWeight: 800 }}>${plans.find(p => p.id === plan)?.price || 0}</span>
+                {/* RIGHT: Payment form for paid plans */}
+                {isPaid && (
+                  <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 16, padding: 24 }}>
+                    <h3 style={{ fontSize: 16, fontWeight: 700, color: "#fff", margin: "0 0 16px" }}>Secure Payment</h3>
+                    {clientSecret ? (
+                      <Elements stripe={stripePromise} options={{ clientSecret, appearance: { theme: "night", variables: { colorPrimary: "#4ecdc4", colorBackground: "#111827", colorText: "#f9fafb", colorDanger: "#ef4444", fontFamily: "inherit", borderRadius: "8px" } } }}>
+                        <CheckoutForm onPaymentSuccess={handleSubmitOrder} stripeError={stripeError} />
+                      </Elements>
+                    ) : stripeError ? (
+                      <div style={{ color: "#ef4444", fontSize: 13, padding: 16 }}>{stripeError}</div>
+                    ) : (
+                      <div style={{ display: "flex", alignItems: "center", gap: 10, color: "#6b7280", fontSize: 13, padding: 16 }}>
+                        <RefreshCw size={14} className="animate-spin" /> Setting up secure payment...
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           <div style={{ display: "flex", gap: 10, marginTop: 32 }}>
-            {step > 1 && <button onClick={() => setStep(step - 1)} style={{ padding: "12px 24px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.08)", background: "transparent", color: "#9ca3af", fontSize: 13, cursor: "pointer", minWidth: 100 }}>Back</button>}
+            {step > 1 && <button onClick={() => { setStep(step - 1); if (step === 3) { setClientSecret(null); setStripeError(null); } }} style={{ padding: "12px 24px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.08)", background: "transparent", color: "#9ca3af", fontSize: 13, cursor: "pointer", minWidth: 100 }}>Back</button>}
             {step < 3 && (
               <button
-                onClick={() => {
+                onClick={async () => {
                   if (step === 1 && !plan) return;
                   if (step === 2) {
                     if (!projectTitle.trim() || !briefDesc.trim() || productPhotos.length === 0) return;
                   }
-                  setStep(step + 1);
+                  const nextStep = step + 1;
+                  setStep(nextStep);
+                  // Pre-fetch client secret when reaching Step 3 for paid plans
+                  if (nextStep === 3) {
+                    const selectedPlan = plans.find(p => p.id === plan);
+                    if (selectedPlan && selectedPlan.price > 0) {
+                      try {
+                        const res = await fetch('/api/stripe/payment-intent', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ price: selectedPlan.price, planName: selectedPlan.name })
+                        });
+                        const data = await res.json();
+                        if (data.clientSecret) setClientSecret(data.clientSecret);
+                        else setStripeError('Could not initialize payment. Please try again.');
+                      } catch (e) {
+                        setStripeError('Payment setup failed. Please try again.');
+                      }
+                    }
+                  }
                 }}
                 disabled={(step === 1 && !plan) || (step === 2 && (!projectTitle.trim() || !briefDesc.trim() || productPhotos.length === 0))}
                 style={{
@@ -946,7 +1070,6 @@ export default function TyesClient() {
                 Continue
               </button>
             )}
-            {step === 3 && <button onClick={handleSubmitOrder} disabled={isSubmitting} style={{ padding: "12px 32px", borderRadius: 10, border: "none", background: "linear-gradient(135deg,#4ecdc4,#2ab7a9)", color: "#fff", fontSize: 13, fontWeight: 700, cursor: isSubmitting ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, opacity: isSubmitting ? 0.7 : 1, minWidth: 160 }}>{isSubmitting ? <RefreshCw size={13} className="animate-spin" /> : <Send size={13} />} {isSubmitting ? "Submitting..." : "Submit Order"}</button>}
           </div>
         </div>
       </div>

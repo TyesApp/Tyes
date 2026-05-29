@@ -241,13 +241,20 @@ const DashboardPage = ({ toast, goTo, orders, users }) => {
   );
 };
 
-const OrdersPage = ({ orders, setOrders, toast, goTo, supabase }) => {
+const OrdersPage = ({ orders, setOrders, toast, goTo, supabase, targetOrder, setTargetOrder }) => {
   const [filter, setFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [menuOpen, setMenuOpen] = useState(null);
   const [viewOrder, setViewOrder] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
+
+  useEffect(() => {
+    if (targetOrder) {
+      setViewOrder(targetOrder);
+      if (setTargetOrder) setTargetOrder(null);
+    }
+  }, [targetOrder, setTargetOrder]);
 
   const filtered = orders
     .filter(o => {
@@ -780,9 +787,18 @@ const UsersPage = ({ users, setUsers, toast, supabase }) => {
   );
 };
 
-const PricingPage = ({ plans, setPlans, toast, supabase }) => {
+const PricingPage = ({ plans, setPlans, toast, supabase, orders, goTo, setTargetOrder }) => {
   const [editPlan, setEditPlan] = useState(null);
-  const [form, setForm] = useState({ name: "", images: "", price: "" });
+  const [form, setForm] = useState({ name: "", images: 10, price: 99 });
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
+
+  const transactions = (orders || [])
+    .filter(o => (o.revenue || 0) > 0)
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+  const totalPages = Math.ceil(transactions.length / itemsPerPage);
+  const paginatedTransactions = transactions.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   const openEdit = (p) => { setForm({ name: p.name, images: String(p.images), price: String(p.price) }); setEditPlan(p.id); };
 
@@ -901,6 +917,81 @@ const PricingPage = ({ plans, setPlans, toast, supabase }) => {
       <div style={{ marginTop: 32, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 16, padding: 24 }}>
         <h3 style={{ fontSize: 14, fontWeight: 700, color: "#fff", margin: "0 0 16px" }}>Revenue by Plan (March)</h3>
         <ResponsiveContainer width="100%" height={220}><BarChart data={[{ plan: "Free", revenue: 0 }, { plan: "Single", revenue: 280 }, { plan: "Starter", revenue: 2700 }, { plan: "Growth", revenue: 4800 }, { plan: "Social", revenue: 550 }, { plan: "Enterprise", revenue: 2870 }]} barSize={36}><CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" /><XAxis dataKey="plan" tick={{ fill: "#6b7280", fontSize: 11 }} axisLine={false} tickLine={false} /><YAxis tick={{ fill: "#6b7280", fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={v => `$${v}`} /><Tooltip contentStyle={{ background: "#1a1a1a", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 10, fontSize: 12, color: "#fff" }} /><Bar dataKey="revenue" fill="#2ab7a9" radius={[6, 6, 0, 0]} /></BarChart></ResponsiveContainer>
+      </div>
+
+      <div style={{ marginTop: 32 }}>
+        <h3 style={{ fontSize: 18, fontWeight: 700, color: "#fff", margin: "0 0 16px" }}>Recent Transactions</h3>
+        <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 16, overflow: "hidden" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead>
+              <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+                {["Transaction ID", "Customer", "Plan", "Amount", "Date", ""].map((h, i) => (
+                  <th key={i} style={{ padding: "12px 16px", textAlign: "left", fontSize: 11, fontWeight: 600, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em" }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {paginatedTransactions.length > 0 ? paginatedTransactions.map((t) => (
+                <tr key={t.id} style={{ borderBottom: "1px solid rgba(255,255,255,0.03)" }} onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.02)"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                  <td style={{ padding: "12px 16px", fontSize: 12, color: "#7dd8d0", fontWeight: 600, fontFamily: "monospace" }}>{t.id}</td>
+                  <td style={{ padding: "12px 16px" }}><div style={{ fontSize: 12, color: "#e5e7eb", fontWeight: 500 }}>{t.customer}</div><div style={{ fontSize: 11, color: "#4b5563" }}>{t.email}</div></td>
+                  <td style={{ padding: "12px 16px", fontSize: 12, color: "#9ca3af" }}>{t.plan}</td>
+                  <td style={{ padding: "12px 16px", fontSize: 12, color: "#34d399", fontWeight: 700 }}>${t.revenue}</td>
+                  <td style={{ padding: "12px 16px", fontSize: 11, color: "#6b7280" }}>{t.date}</td>
+                  <td style={{ padding: "12px 16px", textAlign: "right" }}>
+                    <button onClick={() => { if (setTargetOrder) setTargetOrder(t); if (goTo) goTo("orders"); }} style={{ padding: "6px 12px", borderRadius: 6, border: "1px solid rgba(255,255,255,0.08)", background: "transparent", color: "#4ecdc4", fontSize: 11, fontWeight: 600, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6, transition: "all 0.2s" }} onMouseEnter={e => e.currentTarget.style.background = "rgba(78,205,196,0.1)"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                      Order <ArrowUpRight size={12} />
+                    </button>
+                  </td>
+                </tr>
+              )) : (
+                <tr>
+                  <td colSpan="6" style={{ padding: "40px 16px", textAlign: "center", color: "#6b7280", fontSize: 13 }}>No successful transactions found yet.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {totalPages > 1 && (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 20, padding: "0 4px" }}>
+            <div style={{ fontSize: 12, color: "#4b5563" }}>
+              Showing <span style={{ color: "#9ca3af" }}>{(currentPage - 1) * itemsPerPage + 1}</span> to <span style={{ color: "#9ca3af" }}>{Math.min(currentPage * itemsPerPage, transactions.length)}</span> of <span style={{ color: "#9ca3af" }}>{transactions.length}</span> transactions
+            </div>
+            <div style={{ display: "flex", gap: 6 }}>
+              <button
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                style={{ padding: "6px 12px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.02)", color: currentPage === 1 ? "#374151" : "#9ca3af", fontSize: 12, cursor: currentPage === 1 ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: 4 }}
+              >
+                <ChevronLeft size={14} /> Previous
+              </button>
+              {[...Array(totalPages)].map((_, i) => {
+                const p = i + 1;
+                if (totalPages > 5 && Math.abs(p - currentPage) > 1 && p !== 1 && p !== totalPages) {
+                  if (Math.abs(p - currentPage) === 2) return <span key={p} style={{ color: "#374151", padding: "0 4px" }}>...</span>;
+                  return null;
+                }
+                return (
+                  <button
+                    key={p}
+                    onClick={() => setCurrentPage(p)}
+                    style={{ width: 32, height: 32, borderRadius: 8, border: "1px solid", borderColor: currentPage === p ? "rgba(78,205,196,0.3)" : "rgba(255,255,255,0.06)", background: currentPage === p ? "rgba(78,205,196,0.15)" : "rgba(255,255,255,0.02)", color: currentPage === p ? "#4ecdc4" : "#9ca3af", fontSize: 12, fontWeight: 600, cursor: "pointer" }}
+                  >
+                    {p}
+                  </button>
+                );
+              })}
+              <button
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                style={{ padding: "6px 12px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.02)", color: currentPage === totalPages ? "#374151" : "#9ca3af", fontSize: 12, cursor: currentPage === totalPages ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: 4 }}
+              >
+                Next <ChevronRight size={14} />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -1236,6 +1327,7 @@ export default function TyesAdmin() {
   const [loading, setLoading] = useState(true);
   const [studioInfo, setStudioInfo] = useState(null);
   const [adminUser, setAdminUser] = useState(null);
+  const [adminTargetOrder, setAdminTargetOrder] = useState(null);
 
   const fetchDashboardData = async () => {
     setLoading(true);
@@ -1413,10 +1505,10 @@ export default function TyesAdmin() {
 
     switch (page) {
       case "dashboard": return <DashboardPage toast={addToast} goTo={setPage} orders={orders} users={users} />;
-      case "orders": return <OrdersPage orders={orders} setOrders={setOrders} toast={addToast} goTo={setPage} supabase={supabase} />;
+      case "orders": return <OrdersPage orders={orders} setOrders={setOrders} toast={addToast} goTo={setPage} supabase={supabase} targetOrder={adminTargetOrder} setTargetOrder={setAdminTargetOrder} />;
       case "clients": return <UsersPage users={users} setUsers={setUsers} toast={addToast} supabase={supabase} />;
       case "analytics": return <AnalyticsPage users={users} orders={orders} />;
-      case "pricing": return <PricingPage plans={plans} setPlans={setPlans} toast={addToast} supabase={supabase} />;
+      case "pricing": return <PricingPage plans={plans} setPlans={setPlans} toast={addToast} supabase={supabase} orders={orders} goTo={setPage} setTargetOrder={setAdminTargetOrder} />;
       case "settings": return <SettingsPage toast={addToast} studioInfo={studioInfo} setStudioInfo={setStudioInfo} supabase={supabase} users={users} adminUser={adminUser} setAdminUser={setAdminUser} />;
       default: return <DashboardPage toast={addToast} goTo={setPage} />;
     }
