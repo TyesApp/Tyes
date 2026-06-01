@@ -6,7 +6,7 @@ import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
 import { Search, Bell, ChevronDown, ChevronRight, ChevronLeft, Download, MoreVertical, Plus, Eye, Check, X, Clock, RefreshCw, Upload, Image, Settings, LogOut, Home, Package, CreditCard, FileText, MessageSquare, User, Camera, Paperclip, Send, Star, ArrowUpRight, Menu, AlertCircle, Zap, ExternalLink, Trash2, Edit, Save } from "lucide-react";
 import { loadStripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
-const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY);
+// stripePromise is lazy-loaded per component instance to avoid the global Stripe badge
 
 // ══════════════════════════════════════
 // CHECKOUT FORM (top-level for stable identity)
@@ -729,6 +729,13 @@ export default function TyesClient() {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [clientSecret, setClientSecret] = useState(null);
     const [stripeError, setStripeError] = useState(null);
+
+    // Lazy-load Stripe only when this page mounts (prevents global badge on other tabs)
+    const stripePromiseRef = useRef(null);
+    if (!stripePromiseRef.current) {
+      stripePromiseRef.current = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY);
+    }
+    const stripePromise = stripePromiseRef.current;
 
     const plans = pricingPlans;
 
