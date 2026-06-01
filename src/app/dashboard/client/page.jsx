@@ -6,7 +6,6 @@ import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
 import { Search, Bell, ChevronDown, ChevronRight, ChevronLeft, Download, MoreVertical, Plus, Eye, Check, X, Clock, RefreshCw, Upload, Image, Settings, LogOut, Home, Package, CreditCard, FileText, MessageSquare, User, Camera, Paperclip, Send, Star, ArrowUpRight, Menu, AlertCircle, Zap, ExternalLink, Trash2, Edit, Save } from "lucide-react";
 import { loadStripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
-
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY);
 
 // ══════════════════════════════════════
@@ -383,38 +382,38 @@ export default function TyesClient() {
       addToast("No images found to download", "warning");
       return;
     }
-    
+
     addToast("Preparing ZIP file... this may take a moment", "info");
-    
+
     try {
       const JSZip = (await import("jszip")).default;
       const zip = new JSZip();
-      
+
       const fetchPromises = urlsToDownload.map(async (url, index) => {
         try {
           const response = await fetch(url);
           if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
           const blob = await response.blob();
-          
+
           let filename = `image_${index + 1}.png`;
           try {
             const urlObj = new URL(url);
             const pathParts = urlObj.pathname.split('/');
             const lastPart = pathParts[pathParts.length - 1];
             if (lastPart) {
-                const questionIndex = lastPart.indexOf('?');
-                filename = questionIndex !== -1 ? lastPart.substring(0, questionIndex) : lastPart;
+              const questionIndex = lastPart.indexOf('?');
+              filename = questionIndex !== -1 ? lastPart.substring(0, questionIndex) : lastPart;
             }
-          } catch (e) {}
+          } catch (e) { }
           zip.file(filename, blob);
         } catch (error) {
           console.error(`Failed to load ${url}:`, error);
           zip.file(`error_${index}.txt`, `Failed to download: \${url}\nError: \${error.message}`);
         }
       });
-      
+
       await Promise.all(fetchPromises);
-      
+
       const content = await zip.generateAsync({ type: "blob" });
       const blobUrl = URL.createObjectURL(content);
       const a = document.createElement("a");
@@ -424,7 +423,7 @@ export default function TyesClient() {
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(blobUrl);
-      
+
       addToast("ZIP download started successfully!", "success");
     } catch (error) {
       console.error("ZIP Generation Error:", error);
@@ -509,22 +508,24 @@ export default function TyesClient() {
               {[
                 { icon: Plus, label: "New Order", desc: "Start a new project", action: () => setPage("new-order") },
                 // { icon: MessageSquare, label: "Messages", desc: `${unreadMsgs} unread message${unreadMsgs !== 1 ? "s" : ""}`, action: () => setPage("messages") },
-                { icon: Download, label: "Download All", desc: "All delivered images", action: () => {
-                  const links = [];
-                  orders.forEach(o => {
-                    o.items?.forEach(i => {
-                      if ((i.status === "delivered" || i.status === "completed" || o.status === "delivered") && i.finishImage) {
-                        links.push(i.finishImage);
-                      }
+                {
+                  icon: Download, label: "Download All", desc: "All delivered images", action: () => {
+                    const links = [];
+                    orders.forEach(o => {
+                      o.items?.forEach(i => {
+                        if ((i.status === "delivered" || i.status === "completed" || o.status === "delivered") && i.finishImage) {
+                          links.push(i.finishImage);
+                        }
+                      });
                     });
-                  });
 
-                  if (links.length === 0) {
-                    addToast("No delivered images found yet", "warning");
-                    return;
+                    if (links.length === 0) {
+                      addToast("No delivered images found yet", "warning");
+                      return;
+                    }
+                    downloadAsZip(links, `Tyes_All_Delivered_Images.zip`);
                   }
-                  downloadAsZip(links, `Tyes_All_Delivered_Images.zip`);
-                }},
+                },
                 { icon: FileText, label: "View Invoices", desc: `$${invoices.filter(i => i.status === "pending").reduce((s, i) => s + i.amount, 0)} pending`, action: () => setPage("invoices") },
               ].map((a, i) => (
                 <div key={i} onClick={a.action} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", borderRadius: 10, background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.04)", cursor: "pointer", transition: "all 0.2s" }} onMouseEnter={e => e.currentTarget.style.borderColor = "rgba(78,205,196,0.2)"} onMouseLeave={e => e.currentTarget.style.borderColor = "rgba(255,255,255,0.04)"}>
