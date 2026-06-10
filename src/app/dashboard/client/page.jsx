@@ -299,6 +299,29 @@ export default function TyesClient() {
           };
         }));
       }
+
+      // 5. Fetch Invoices
+      const { data: invoicesData, error: invoicesError } = await supabase
+        .from('invoices')
+        .select(`*, orders ( title )`)
+        .eq('user_id', authUser.id)
+        .order('created_at', { ascending: false });
+
+      if (invoicesError) {
+        // Table might not exist yet, ignore error silently
+        console.log("Invoices table might not exist yet:", invoicesError.message);
+      } else if (invoicesData) {
+        setInvoices(invoicesData.map(i => ({
+          id: i.smartbill_number ? `${i.smartbill_series}-${i.smartbill_number}` : `INV-${i.id.slice(0, 8)}`,
+          order: i.orders?.title || `ORD-${i.order_id.slice(0, 8)}`,
+          amount: i.amount,
+          status: i.status,
+          date: i.created_at ? new Date(i.created_at).toISOString().split('T')[0] : i.due_date,
+          due: i.due_date,
+          url: i.invoice_url
+        })));
+      }
+
     } catch (err) {
       console.error("Error fetching dashboard data:", err);
     } finally {
@@ -344,15 +367,7 @@ export default function TyesClient() {
   ]);
 
   // ── Invoices State ──
-  const [invoices, setInvoices] = useState([
-    { id: "INV-0087", order: "ORD-3011", amount: 80, status: "pending", date: "2026-04-13", due: "2026-04-27" },
-    { id: "INV-0074", order: "ORD-2988", amount: 45, status: "paid", date: "2026-03-28", due: "2026-04-11" },
-    { id: "INV-0068", order: "ORD-2965", amount: 45, status: "paid", date: "2026-03-15", due: "2026-03-29" },
-    { id: "INV-0055", order: "ORD-2940", amount: 80, status: "paid", date: "2026-03-01", due: "2026-03-15" },
-    { id: "INV-0044", order: "ORD-2921", amount: 45, status: "paid", date: "2026-02-18", due: "2026-03-04" },
-    { id: "INV-0033", order: "ORD-2900", amount: 80, status: "paid", date: "2026-02-05", due: "2026-02-19" },
-    { id: "INV-0021", order: "ORD-2880", amount: 10, status: "paid", date: "2026-01-20", due: "2026-02-03" },
-  ]);
+  const [invoices, setInvoices] = useState([]);
 
   // ── Notifications ──
   const [notifications, setNotifications] = useState([
@@ -811,7 +826,7 @@ export default function TyesClient() {
           status: "pending"
         }));
 
-        const { error: insertError } = await supabase.from("orders").insert([{
+        const { data: newOrder, error: insertError } = await supabase.from("orders").insert([{
           user_id: currentUser.id,
           customer_email: currentUser.email,
           customer_name: clientInfo.name || currentUser.user_metadata?.first_name || "Client",
@@ -830,9 +845,20 @@ export default function TyesClient() {
           brief_description: briefDesc,
           selected_styles: selectedStyles,
           created_at: new Date().toISOString()
-        }]);
+        }]).select().single();
 
         if (insertError) throw insertError;
+
+        // Trigger invoice generation and order confirmation email
+        try {
+          await fetch('/api/orders/post-payment', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ orderId: newOrder.id })
+          });
+        } catch (postPaymentErr) {
+          console.error("Post payment processing error:", postPaymentErr);
+        }
 
         addToast(selectedPlan.price > 0 ? "Payment successful! Your order is now processing." : "Order submitted! We'll notify you when your images are ready.", "success", 8000);
         fetchData();
@@ -1016,7 +1042,7 @@ export default function TyesClient() {
                   <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 16, padding: 24 }}>
                     <h3 style={{ fontSize: 16, fontWeight: 700, color: "#fff", margin: "0 0 16px" }}>Secure Payment</h3>
                     {clientSecret ? (
-                      <Elements stripe={stripePromise} options={{ clientSecret, appearance: { theme: "night", variables: { colorPrimary: "#4ecdc4", colorBackground: "#111827", colorText: "#f9fafb", colorDanger: "#ef4444", fontFamily: "inherit", borderRadius: "8px" } } }}>
+                      <Elements stripe={stripePromise} options={{ clientSecret, appearance: { theme: "night", variables: { colorPrimary: "#4ecdc4", colorBackground: "#111827", colorText: "#f9fafb", colorDanger: "#ef4444", fontFamily: '"Inter", -apple-system, sans-serif', borderRadius: "8px" } } }}>
                         <CheckoutForm onPaymentSuccess={handleSubmitOrder} stripeError={stripeError} />
                       </Elements>
                     ) : stripeError ? (
@@ -1140,6 +1166,14 @@ export default function TyesClient() {
       addToast(`Invoice ${inv.id} paid successfully!`);
     };
 
+    const handleDownloadInvoice = (inv) => {
+      if (inv.url) {
+        window.open(inv.url, '_blank');
+      } else {
+        addToast(`Downloading ${inv.id}...`, "info");
+      }
+    };
+
     return (
       <div>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24 }}>
@@ -1169,7 +1203,7 @@ export default function TyesClient() {
                   <td style={{ padding: "12px 16px", fontSize: 12, color: "#6b7280" }}>{inv.date}</td>
                   <td style={{ padding: "12px 16px", fontSize: 12, color: "#6b7280" }}>{inv.due}</td>
                   <td style={{ padding: "12px 16px", display: "flex", gap: 6 }}>
-                    <button onClick={() => addToast(`Downloading ${inv.id}...`, "info")} style={{ background: "none", border: "none", color: "#4b5563", cursor: "pointer", padding: 4 }}><Download size={13} /></button>
+                    <button onClick={() => handleDownloadInvoice(inv)} style={{ background: "none", border: "none", color: "#4b5563", cursor: "pointer", padding: 4 }}><Download size={13} /></button>
                     {inv.status === "pending" && (
                       <button onClick={() => handlePayInvoice(inv)} style={{ background: "rgba(78,205,196,0.1)", border: "1px solid rgba(78,205,196,0.3)", borderRadius: 6, color: "#4ecdc4", cursor: "pointer", padding: "2px 8px", fontSize: 11, fontWeight: 600 }}>Pay</button>
                     )}
