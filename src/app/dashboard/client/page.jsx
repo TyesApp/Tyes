@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
 import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
-import { Search, Bell, ChevronDown, ChevronRight, ChevronLeft, Download, MoreVertical, Plus, Eye, Check, X, Clock, RefreshCw, Upload, Image, Settings, LogOut, Home, Package, CreditCard, FileText, MessageSquare, User, Camera, Paperclip, Send, Star, ArrowUpRight, Menu, AlertCircle, Zap, ExternalLink, Trash2, Edit, Save } from "lucide-react";
+import { Search, Bell, ChevronDown, ChevronRight, ChevronLeft, Download, MoreVertical, Plus, Eye, Check, X, Clock, RefreshCw, Upload, Image, Settings, LogOut, Home, Package, CreditCard, FileText, MessageSquare, User, Camera, Paperclip, Send, Star, ArrowUpRight, Menu, AlertCircle, Zap, ExternalLink, Trash2, Edit, Save, CheckCircle } from "lucide-react";
 import { loadStripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 // stripePromise is lazy-loaded per component instance to avoid the global Stripe badge
@@ -336,7 +336,7 @@ export default function TyesClient() {
     const query = new URLSearchParams(window.location.search);
     if (query.get("session_id")) {
       setTimeout(() => {
-        addToast("Payment successful! Your order is now processing.", "success", 5000);
+        setShowPaymentSuccessModal(true);
         // Clear the query string
         router.replace("/dashboard/client", undefined, { shallow: true });
       }, 1000);
@@ -353,6 +353,7 @@ export default function TyesClient() {
   };
   const [showOrderDetailModal, setShowOrderDetailModal] = useState(null);
   const [showRevisionModal, setShowRevisionModal] = useState(null);
+  const [showPaymentSuccessModal, setShowPaymentSuccessModal] = useState(false);
 
   // Client info and orders are now initialized empty and filled by fetchData
   const [clientInfo, setClientInfo] = useState({
@@ -860,7 +861,7 @@ export default function TyesClient() {
           console.error("Post payment processing error:", postPaymentErr);
         }
 
-        addToast(selectedPlan.price > 0 ? "Payment successful! Your order is now processing." : "Order submitted! We'll notify you when your images are ready.", "success", 8000);
+        setShowPaymentSuccessModal(true);
         fetchData();
         setStep(1);
         setPage("orders");
@@ -1558,6 +1559,25 @@ export default function TyesClient() {
             </div>
           </div>
         )}
+      </Modal>
+
+      {/* Payment Success Modal */}
+      <Modal open={showPaymentSuccessModal} onClose={() => setShowPaymentSuccessModal(false)} title="Order Complete" width={400}>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", padding: "10px 0 20px" }}>
+          <div style={{ width: 80, height: 80, borderRadius: "50%", background: "rgba(52,211,153,0.1)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 24 }}>
+            <CheckCircle size={40} color="#34d399" />
+          </div>
+          <h2 style={{ fontSize: 24, fontWeight: 800, color: "#fff", margin: "0 0 12px" }}>Order Completed!</h2>
+          <p style={{ fontSize: 14, color: "#9ca3af", margin: "0 0 32px", lineHeight: 1.6 }}>
+            Thank you! Your payment was successful and we are now processing your order.
+          </p>
+          <button 
+            onClick={() => { setShowPaymentSuccessModal(false); setPage("orders"); }}
+            style={{ width: "100%", padding: "14px 0", borderRadius: 12, border: "none", background: "linear-gradient(135deg,#4ecdc4,#2ab7a9)", color: "#fff", fontSize: 15, fontWeight: 700, cursor: "pointer", transition: "all 0.2s" }}
+          >
+            View My Orders
+          </button>
+        </div>
       </Modal>
 
       {/* Sidebar */}
