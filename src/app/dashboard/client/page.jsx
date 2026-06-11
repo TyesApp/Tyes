@@ -11,7 +11,7 @@ import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-
 // ══════════════════════════════════════
 // CHECKOUT FORM (top-level for stable identity)
 // ══════════════════════════════════════
-const CheckoutForm = ({ onPaymentSuccess, stripeError }) => {
+const CheckoutForm = ({ onPaymentSuccess, stripeError, setGlobalLoading }) => {
   const stripe = useStripe();
   const elements = useElements();
   const [paying, setPaying] = useState(false);
@@ -21,9 +21,14 @@ const CheckoutForm = ({ onPaymentSuccess, stripeError }) => {
     if (!stripe || !elements || paying) return;
     setPaying(true);
     setPayError(null);
+    if (setGlobalLoading) setGlobalLoading(true);
     try {
       const { error: submitErr } = await elements.submit();
-      if (submitErr) { setPayError(submitErr.message); return; }
+      if (submitErr) { 
+        setPayError(submitErr.message); 
+        if (setGlobalLoading) setGlobalLoading(false);
+        return; 
+      }
 
       const { error: confirmErr } = await stripe.confirmPayment({
         elements,
@@ -31,12 +36,17 @@ const CheckoutForm = ({ onPaymentSuccess, stripeError }) => {
         redirect: "if_required",
       });
 
-      if (confirmErr) { setPayError(confirmErr.message); return; }
+      if (confirmErr) { 
+        setPayError(confirmErr.message); 
+        if (setGlobalLoading) setGlobalLoading(false);
+        return; 
+      }
 
       // Payment confirmed — hand off to parent for uploads + DB insert
       await onPaymentSuccess();
     } catch (e) {
       setPayError(e.message || "Payment failed");
+      if (setGlobalLoading) setGlobalLoading(false);
     } finally {
       setPaying(false);
     }
@@ -335,8 +345,10 @@ export default function TyesClient() {
     // Check for Stripe checkout session success
     const query = new URLSearchParams(window.location.search);
     if (query.get("session_id")) {
+      setGlobalLoading(true);
       setTimeout(() => {
-        setShowPaymentSuccessModal(true);
+        setGlobalLoading(false);
+        setPage("success");
         // Clear the query string
         router.replace("/dashboard/client", undefined, { shallow: true });
       }, 1000);
@@ -353,7 +365,7 @@ export default function TyesClient() {
   };
   const [showOrderDetailModal, setShowOrderDetailModal] = useState(null);
   const [showRevisionModal, setShowRevisionModal] = useState(null);
-  const [showPaymentSuccessModal, setShowPaymentSuccessModal] = useState(false);
+  const [globalLoading, setGlobalLoading] = useState(false);
 
   // Client info and orders are now initialized empty and filled by fetchData
   const [clientInfo, setClientInfo] = useState({
@@ -793,6 +805,7 @@ export default function TyesClient() {
     const handleSubmitOrder = async (stripeObj, elementsObj) => {
       if (isSubmitting) return;
       setIsSubmitting(true);
+      setGlobalLoading(true);
       try {
         const { data: { user: currentUser } } = await supabase.auth.getUser();
         if (!currentUser) throw new Error("Please sign in to place an order.");
@@ -861,15 +874,15 @@ export default function TyesClient() {
           console.error("Post payment processing error:", postPaymentErr);
         }
 
-        setShowPaymentSuccessModal(true);
         fetchData();
         setStep(1);
-        setPage("orders");
+        setPage("success");
       } catch (err) {
         console.error("Submission error:", err);
         addToast(err.message || "Failed to submit order", "error");
       } finally {
         setIsSubmitting(false);
+        setGlobalLoading(false);
       }
     };
 
@@ -1044,7 +1057,7 @@ export default function TyesClient() {
                     <h3 style={{ fontSize: 16, fontWeight: 700, color: "#fff", margin: "0 0 16px" }}>Secure Payment</h3>
                     {clientSecret ? (
                       <Elements stripe={stripePromise} options={{ clientSecret, appearance: { theme: "night", variables: { colorPrimary: "#4ecdc4", colorBackground: "#111827", colorText: "#f9fafb", colorDanger: "#ef4444", fontFamily: '"Inter", -apple-system, sans-serif', borderRadius: "8px" } } }}>
-                        <CheckoutForm onPaymentSuccess={handleSubmitOrder} stripeError={stripeError} />
+                        <CheckoutForm onPaymentSuccess={handleSubmitOrder} stripeError={stripeError} setGlobalLoading={setGlobalLoading} />
                       </Elements>
                     ) : stripeError ? (
                       <div style={{ color: "#ef4444", fontSize: 13, padding: 16 }}>{stripeError}</div>
@@ -1350,6 +1363,27 @@ export default function TyesClient() {
   };
 
   // ══════════════════════════════════════
+  // SUCCESS PAGE
+  // ══════════════════════════════════════
+  const SuccessPage = () => (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", padding: "40px 20px", textAlign: "center" }}>
+      <div style={{ width: 100, height: 100, borderRadius: "50%", background: "rgba(52,211,153,0.1)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 32 }}>
+        <CheckCircle size={50} color="#34d399" />
+      </div>
+      <h1 style={{ fontSize: 32, fontWeight: 900, color: "#fff", marginBottom: 16 }}>Order Submitted Successfully!</h1>
+      <p style={{ fontSize: 16, color: "#9ca3af", maxWidth: 500, lineHeight: 1.6, marginBottom: 40 }}>
+        Thank you! Your payment was successful and your order is now confirmed. We are already processing your request and will notify you as soon as there are updates.
+      </p>
+      <button 
+        onClick={() => setPage("orders")}
+        style={{ padding: "14px 32px", borderRadius: 12, border: "none", background: "linear-gradient(135deg,#4ecdc4,#2ab7a9)", color: "#fff", fontSize: 16, fontWeight: 700, cursor: "pointer", transition: "all 0.2s", display: "flex", alignItems: "center", gap: 10, alignSelf: "center" }}
+      >
+        <Package size={18} /> View My Orders
+      </button>
+    </div>
+  );
+
+  // ══════════════════════════════════════
   // RENDER
   // ══════════════════════════════════════
   const renderPage = () => {
@@ -1360,6 +1394,7 @@ export default function TyesClient() {
       case "messages": return <MessagesPage />;
       case "invoices": return <InvoicesPage />;
       case "account": return <AccountPage />;
+      case "success": return <SuccessPage />;
       default: return <OverviewPage />;
     }
   };
@@ -1561,24 +1596,16 @@ export default function TyesClient() {
         )}
       </Modal>
 
-      {/* Payment Success Modal */}
-      <Modal open={showPaymentSuccessModal} onClose={() => setShowPaymentSuccessModal(false)} title="Order Complete" width={400}>
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", padding: "10px 0 20px" }}>
-          <div style={{ width: 80, height: 80, borderRadius: "50%", background: "rgba(52,211,153,0.1)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 24 }}>
-            <CheckCircle size={40} color="#34d399" />
+      {/* Global Loading Overlay */}
+      {globalLoading && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 99999, background: "rgba(0,0,0,0.8)", display: "flex", alignItems: "center", justifyContent: "center", backdropFilter: "blur(4px)" }}>
+          <div style={{ textAlign: "center" }}>
+            <RefreshCw size={48} className="animate-spin" style={{ color: "#4ecdc4", marginBottom: 16 }} />
+            <div style={{ fontSize: 18, fontWeight: 600, color: "#fff" }}>Processing Order...</div>
+            <div style={{ fontSize: 13, color: "#9ca3af", marginTop: 8 }}>Please do not close this window.</div>
           </div>
-          <h2 style={{ fontSize: 24, fontWeight: 800, color: "#fff", margin: "0 0 12px" }}>Order Completed!</h2>
-          <p style={{ fontSize: 14, color: "#9ca3af", margin: "0 0 32px", lineHeight: 1.6 }}>
-            Thank you! Your payment was successful and we are now processing your order.
-          </p>
-          <button 
-            onClick={() => { setShowPaymentSuccessModal(false); setPage("orders"); }}
-            style={{ width: "100%", padding: "14px 0", borderRadius: 12, border: "none", background: "linear-gradient(135deg,#4ecdc4,#2ab7a9)", color: "#fff", fontSize: 15, fontWeight: 700, cursor: "pointer", transition: "all 0.2s" }}
-          >
-            View My Orders
-          </button>
         </div>
-      </Modal>
+      )}
 
       {/* Sidebar */}
       <div style={{ width: collapsed ? 64 : 220, borderRight: "1px solid rgba(255,255,255,0.06)", display: "flex", flexDirection: "column", padding: collapsed ? "16px 8px" : "16px 12px", flexShrink: 0, transition: "width 0.2s", overflow: "hidden" }}>
