@@ -11,7 +11,7 @@ import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-
 // ══════════════════════════════════════
 // CHECKOUT FORM (top-level for stable identity)
 // ══════════════════════════════════════
-const CheckoutForm = ({ onPaymentSuccess, stripeError, setGlobalLoading }) => {
+const CheckoutForm = ({ onPaymentSuccess, stripeError }) => {
   const stripe = useStripe();
   const elements = useElements();
   const [paying, setPaying] = useState(false);
@@ -21,12 +21,11 @@ const CheckoutForm = ({ onPaymentSuccess, stripeError, setGlobalLoading }) => {
     if (!stripe || !elements || paying) return;
     setPaying(true);
     setPayError(null);
-    if (setGlobalLoading) setGlobalLoading(true);
     try {
       const { error: submitErr } = await elements.submit();
       if (submitErr) { 
         setPayError(submitErr.message); 
-        if (setGlobalLoading) setGlobalLoading(false);
+        setPaying(false);
         return; 
       }
 
@@ -38,7 +37,7 @@ const CheckoutForm = ({ onPaymentSuccess, stripeError, setGlobalLoading }) => {
 
       if (confirmErr) { 
         setPayError(confirmErr.message); 
-        if (setGlobalLoading) setGlobalLoading(false);
+        setPaying(false);
         return; 
       }
 
@@ -46,14 +45,21 @@ const CheckoutForm = ({ onPaymentSuccess, stripeError, setGlobalLoading }) => {
       await onPaymentSuccess();
     } catch (e) {
       setPayError(e.message || "Payment failed");
-      if (setGlobalLoading) setGlobalLoading(false);
-    } finally {
       setPaying(false);
     }
   };
 
   return (
     <div>
+      {paying && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 99999, background: "rgba(0,0,0,0.8)", display: "flex", alignItems: "center", justifyContent: "center", backdropFilter: "blur(4px)" }}>
+          <div style={{ textAlign: "center" }}>
+            <RefreshCw size={48} className="animate-spin" style={{ color: "#4ecdc4", marginBottom: 16 }} />
+            <div style={{ fontSize: 18, fontWeight: 600, color: "#fff" }}>Processing Payment...</div>
+            <div style={{ fontSize: 13, color: "#9ca3af", marginTop: 8 }}>Please do not close this window.</div>
+          </div>
+        </div>
+      )}
       <div style={{ marginTop: 4, marginBottom: 8 }}>
         <div style={{ fontSize: 13, fontWeight: 600, color: "#d1d5db", marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}>
           <CreditCard size={14} color="#4ecdc4" /> Payment Details
@@ -342,16 +348,12 @@ export default function TyesClient() {
   useEffect(() => {
     fetchData();
 
-    // Check for Stripe checkout session success
+    // Check for Stripe checkout session success or PaymentElement redirect success
     const query = new URLSearchParams(window.location.search);
-    if (query.get("session_id")) {
-      setGlobalLoading(true);
-      setTimeout(() => {
-        setGlobalLoading(false);
-        setPage("success");
-        // Clear the query string
-        router.replace("/dashboard/client", undefined, { shallow: true });
-      }, 1000);
+    if (query.get("session_id") || query.get("redirect_status") === "succeeded") {
+      setPage("success");
+      // Clear the query string
+      router.replace("/dashboard/client");
     }
   }, [supabase, router, addToast]);
 
@@ -365,7 +367,6 @@ export default function TyesClient() {
   };
   const [showOrderDetailModal, setShowOrderDetailModal] = useState(null);
   const [showRevisionModal, setShowRevisionModal] = useState(null);
-  const [globalLoading, setGlobalLoading] = useState(false);
 
   // Client info and orders are now initialized empty and filled by fetchData
   const [clientInfo, setClientInfo] = useState({
@@ -805,7 +806,6 @@ export default function TyesClient() {
     const handleSubmitOrder = async (stripeObj, elementsObj) => {
       if (isSubmitting) return;
       setIsSubmitting(true);
-      setGlobalLoading(true);
       try {
         const { data: { user: currentUser } } = await supabase.auth.getUser();
         if (!currentUser) throw new Error("Please sign in to place an order.");
@@ -882,13 +882,21 @@ export default function TyesClient() {
         addToast(err.message || "Failed to submit order", "error");
       } finally {
         setIsSubmitting(false);
-        setGlobalLoading(false);
       }
     };
 
 
     return (
       <div style={{ width: "100%", display: "flex", justifyContent: "center", paddingBottom: 40 }}>
+        {isSubmitting && (
+          <div style={{ position: "fixed", inset: 0, zIndex: 99999, background: "rgba(0,0,0,0.8)", display: "flex", alignItems: "center", justifyContent: "center", backdropFilter: "blur(4px)" }}>
+            <div style={{ textAlign: "center" }}>
+              <RefreshCw size={48} className="animate-spin" style={{ color: "#4ecdc4", marginBottom: 16 }} />
+              <div style={{ fontSize: 18, fontWeight: 600, color: "#fff" }}>Processing Order...</div>
+              <div style={{ fontSize: 13, color: "#9ca3af", marginTop: 8 }}>Please do not close this window.</div>
+            </div>
+          </div>
+        )}
         <div style={{ width: "100%", maxWidth: 1200 }}>
           <h1 style={{ fontSize: 24, fontWeight: 800, color: "#fff", margin: "0 0 8px" }}>New Order</h1>
           <p style={{ fontSize: 13, color: "#6b7280", margin: "0 0 32px" }}>Fill in your brief and we'll get started right away.</p>
@@ -1057,7 +1065,7 @@ export default function TyesClient() {
                     <h3 style={{ fontSize: 16, fontWeight: 700, color: "#fff", margin: "0 0 16px" }}>Secure Payment</h3>
                     {clientSecret ? (
                       <Elements stripe={stripePromise} options={{ clientSecret, appearance: { theme: "night", variables: { colorPrimary: "#4ecdc4", colorBackground: "#111827", colorText: "#f9fafb", colorDanger: "#ef4444", fontFamily: '"Inter", -apple-system, sans-serif', borderRadius: "8px" } } }}>
-                        <CheckoutForm onPaymentSuccess={handleSubmitOrder} stripeError={stripeError} setGlobalLoading={setGlobalLoading} />
+                        <CheckoutForm onPaymentSuccess={handleSubmitOrder} stripeError={stripeError} />
                       </Elements>
                     ) : stripeError ? (
                       <div style={{ color: "#ef4444", fontSize: 13, padding: 16 }}>{stripeError}</div>
@@ -1595,17 +1603,6 @@ export default function TyesClient() {
           </div>
         )}
       </Modal>
-
-      {/* Global Loading Overlay */}
-      {globalLoading && (
-        <div style={{ position: "fixed", inset: 0, zIndex: 99999, background: "rgba(0,0,0,0.8)", display: "flex", alignItems: "center", justifyContent: "center", backdropFilter: "blur(4px)" }}>
-          <div style={{ textAlign: "center" }}>
-            <RefreshCw size={48} className="animate-spin" style={{ color: "#4ecdc4", marginBottom: 16 }} />
-            <div style={{ fontSize: 18, fontWeight: 600, color: "#fff" }}>Processing Order...</div>
-            <div style={{ fontSize: 13, color: "#9ca3af", marginTop: 8 }}>Please do not close this window.</div>
-          </div>
-        </div>
-      )}
 
       {/* Sidebar */}
       <div style={{ width: collapsed ? 64 : 220, borderRight: "1px solid rgba(255,255,255,0.06)", display: "flex", flexDirection: "column", padding: collapsed ? "16px 8px" : "16px 12px", flexShrink: 0, transition: "width 0.2s", overflow: "hidden" }}>
