@@ -53,10 +53,10 @@ const CheckoutForm = ({ onPaymentSuccess, stripeError }) => {
     <div>
       {paying && (
         <div style={{ position: "fixed", inset: 0, zIndex: 99999, background: "rgba(0,0,0,0.8)", display: "flex", alignItems: "center", justifyContent: "center", backdropFilter: "blur(4px)" }}>
-          <div style={{ textAlign: "center" }}>
-            <RefreshCw size={48} className="animate-spin" style={{ color: "#4ecdc4", marginBottom: 16 }} />
-            <div style={{ fontSize: 18, fontWeight: 600, color: "#fff" }}>Processing Payment...</div>
-            <div style={{ fontSize: 13, color: "#9ca3af", marginTop: 8 }}>Please do not close this window.</div>
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", padding: "32px", background: "rgba(17,24,39,0.9)", borderRadius: "24px", border: "1px solid rgba(255,255,255,0.1)", boxShadow: "0 25px 50px -12px rgba(0,0,0,0.5)", maxWidth: "90vw" }}>
+            <RefreshCw size={56} className="animate-spin" style={{ color: "#4ecdc4", marginBottom: 20 }} />
+            <div style={{ fontSize: 20, fontWeight: 700, color: "#fff" }}>Processing Payment...</div>
+            <div style={{ fontSize: 14, color: "#9ca3af", marginTop: 8 }}>Please do not close this window.</div>
           </div>
         </div>
       )}
@@ -330,10 +330,10 @@ const NewOrderPage = ({ supabase, addToast, clientInfo, pricingPlans, setPage, f
       <div style={{ width: "100%", display: "flex", justifyContent: "center", paddingBottom: 40 }}>
         {isSubmitting && (
           <div style={{ position: "fixed", inset: 0, zIndex: 99999, background: "rgba(0,0,0,0.8)", display: "flex", alignItems: "center", justifyContent: "center", backdropFilter: "blur(4px)" }}>
-            <div style={{ textAlign: "center" }}>
-              <RefreshCw size={48} className="animate-spin" style={{ color: "#4ecdc4", marginBottom: 16 }} />
-              <div style={{ fontSize: 18, fontWeight: 600, color: "#fff" }}>Processing Order...</div>
-              <div style={{ fontSize: 13, color: "#9ca3af", marginTop: 8 }}>Please do not close this window.</div>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", padding: "32px", background: "rgba(17,24,39,0.9)", borderRadius: "24px", border: "1px solid rgba(255,255,255,0.1)", boxShadow: "0 25px 50px -12px rgba(0,0,0,0.5)", maxWidth: "90vw" }}>
+              <RefreshCw size={56} className="animate-spin" style={{ color: "#4ecdc4", marginBottom: 20 }} />
+              <div style={{ fontSize: 20, fontWeight: 700, color: "#fff" }}>Processing Order...</div>
+              <div style={{ fontSize: 14, color: "#9ca3af", marginTop: 8 }}>Please do not close this window.</div>
             </div>
           </div>
         )}
