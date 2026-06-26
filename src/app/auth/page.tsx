@@ -5,7 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { createClient } from "@/utils/supabase/client";
 
-type Tab = "signin" | "signup" | "forgot";
+type Tab = "signin" | "signup" | "forgot" | "otp" | "forgot_otp";
 
 // ══════════════════════════════════════
 // TOAST NOTIFICATION SYSTEM
@@ -52,6 +52,9 @@ export default function AuthPage() {
   const [lastName, setLastName] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [resetEmail, setResetEmail] = useState("");
+  const [resetOtpCode, setResetOtpCode] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [otpCode, setOtpCode] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -60,8 +63,8 @@ export default function AuthPage() {
     setMounted(true);
   }, []);
 
-  const title = tab === "signin" ? "Welcome back" : tab === "signup" ? "Create account" : "Reset password";
-  const subtitle = tab === "signin" ? "Sign in to your account or create a new one" : tab === "signup" ? "Get started with tyes today" : "We'll help you get back in";
+  const title = tab === "signin" ? "Welcome back" : tab === "signup" ? "Create account" : tab === "otp" || tab === "forgot_otp" ? "Check your email" : "Reset password";
+  const subtitle = tab === "signin" ? "Sign in to your account or create a new one" : tab === "signup" ? "Get started with tyes today" : tab === "otp" ? "Enter the 6-digit code we sent to your email" : tab === "forgot_otp" ? "Enter the recovery code and your new password" : "We'll help you get back in";
 
   if (!mounted) return null;
 
@@ -136,8 +139,8 @@ export default function AuthPage() {
       if (data.user) {
         // If there is no session, it means email confirmation is required
         if (!data.session) {
-          addToast("Registration successful! Please check your email to confirm your account.", "success");
-          setTab("signin");
+          addToast("Verification code sent to your email!", "success");
+          setTab("otp");
         } else {
           addToast("Account created successfully!", "success");
           const role = data.user.user_metadata?.role || "client";
@@ -153,11 +156,90 @@ export default function AuthPage() {
   };
 
 
-  const handleReset = (e?: React.FormEvent) => {
+  const handleReset = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!resetEmail) { addToast("Please enter your email", "error"); return; }
-    addToast("Reset link sent to your email!", "success");
-    setTab("signin");
+    setLoading(true);
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(resetEmail);
+      if (error) throw error;
+      addToast("Recovery code sent to your email!", "success");
+      setTab("forgot_otp");
+    } catch (err: any) {
+      addToast(err.message || "Failed to send recovery code", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResetVerify = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!resetOtpCode || resetOtpCode.length !== 6) { addToast("Please enter a valid 6-digit code", "error"); return; }
+    if (!newPassword || newPassword.length < 6) { addToast("Password must be at least 6 characters", "error"); return; }
+    setLoading(true);
+    try {
+      const { data, error: verifyError } = await supabase.auth.verifyOtp({
+        email: resetEmail,
+        token: resetOtpCode,
+        type: "recovery"
+      });
+      if (verifyError) throw verifyError;
+      
+      if (data.session) {
+        // Update password
+        const { error: updateError } = await supabase.auth.updateUser({ password: newPassword });
+        if (updateError) throw updateError;
+        
+        addToast("Password reset successfully! You can now sign in.", "success");
+        setTab("signin");
+        setResetEmail("");
+        setResetOtpCode("");
+        setNewPassword("");
+      }
+    } catch (err: any) {
+      addToast(err.message || "Invalid code or error resetting password", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyOtp = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!otpCode || otpCode.length !== 6) { addToast("Please enter a valid 6-digit code", "error"); return; }
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.auth.verifyOtp({
+        email,
+        token: otpCode,
+        type: "signup"
+      });
+      if (error) throw error;
+      if (data.session && data.user) {
+        addToast("Account verified successfully!", "success");
+        // Fetch role...
+        const { data: profile } = await supabase.from('profiles').select('role').eq('id', data.user.id).single();
+        const role = profile?.role || data.user?.user_metadata?.role || "client";
+        const isAdmin = ["admin", "superAdmin"].includes(role);
+        router.push(isAdmin ? "/dashboard/admin" : "/dashboard/client");
+      }
+    } catch (err: any) {
+      addToast(err.message || "Invalid or expired code", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResendOtp = async () => {
+    setLoading(true);
+    try {
+      const { error } = await supabase.auth.resend({ type: 'signup', email });
+      if (error) throw error;
+      addToast("A new code has been sent!", "success");
+    } catch (err: any) {
+      addToast(err.message || "Failed to resend code", "error");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -198,7 +280,7 @@ export default function AuthPage() {
         <p style={{ fontFamily: "Montserrat, sans-serif", fontSize: "0.9rem", fontWeight: 500, color: "rgba(255,255,255,0.5)", textAlign: "center", marginBottom: "2.5rem" }}>{subtitle}</p>
 
         {/* Tabs */}
-        {tab !== "forgot" && (
+        {(tab === "signin" || tab === "signup") && (
           <div style={{ display: "flex", gap: 0, marginBottom: "2rem", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, overflow: "hidden" }}>
             <button className={`auth-tab ${tab === "signin" ? "active" : ""}`} onClick={() => setTab("signin")}>Sign In</button>
             <button className={`auth-tab ${tab === "signup" ? "active" : ""}`} onClick={() => setTab("signup")}>Sign Up</button>
@@ -244,12 +326,44 @@ export default function AuthPage() {
         {tab === "forgot" && (
           <form onSubmit={handleReset}>
             <p style={{ fontFamily: "Montserrat, sans-serif", fontWeight: 500, fontSize: "0.85rem", color: "rgba(255,255,255,0.5)", marginBottom: "1.5rem", textAlign: "center" }}>
-              Enter your email and we'll send you a reset link.
+              Enter your email and we'll send you a recovery code.
             </p>
             <input className="auth-input" type="email" placeholder="Email address" value={resetEmail} onChange={e => setResetEmail(e.target.value)} required />
-            <button type="submit" className="auth-btn">Send Reset Link</button>
+            <button type="submit" className="auth-btn" disabled={loading}>{loading ? "Sending..." : "Send Reset Code"}</button>
             <div style={{ textAlign: "center", marginTop: "1rem" }}>
               <button type="button" className="auth-link" style={{ background: "none", border: "none", cursor: "pointer" }} onClick={() => setTab("signin")}>← Back to Sign In</button>
+            </div>
+          </form>
+        )}
+
+        {/* OTP Verification Form */}
+        {tab === "otp" && (
+          <form onSubmit={handleVerifyOtp}>
+            <p style={{ fontFamily: "Montserrat, sans-serif", fontWeight: 500, fontSize: "0.85rem", color: "rgba(255,255,255,0.7)", marginBottom: "1.5rem", textAlign: "center", lineHeight: 1.5 }}>
+              We sent a code to <br/><strong style={{ color: "#4ecdc4" }}>{email}</strong>
+            </p>
+            <input className="auth-input" type="text" placeholder="6-digit code" maxLength={6} value={otpCode} onChange={e => setOtpCode(e.target.value.replace(/\D/g, ''))} style={{ textAlign: "center", fontSize: "1.5rem", letterSpacing: "0.5em", fontWeight: 700 }} required />
+            <button type="submit" className="auth-btn" disabled={loading}>{loading ? "Verifying…" : "Verify Account"}</button>
+            <div style={{ textAlign: "center", marginTop: "1.5rem", display: "flex", flexDirection: "column", gap: "1rem" }}>
+              <p style={{ fontSize: "0.8rem", color: "rgba(255,255,255,0.5)", margin: 0 }}>
+                Didn't receive the code? <button type="button" className="auth-link" style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }} onClick={handleResendOtp} disabled={loading}>Resend</button>
+              </p>
+              <button type="button" className="auth-link" style={{ background: "none", border: "none", cursor: "pointer", alignSelf: "center", fontSize: "0.8rem" }} onClick={() => setTab("signup")}>← Back to Sign Up</button>
+            </div>
+          </form>
+        )}
+
+        {/* Forgot OTP Form */}
+        {tab === "forgot_otp" && (
+          <form onSubmit={handleResetVerify}>
+            <p style={{ fontFamily: "Montserrat, sans-serif", fontWeight: 500, fontSize: "0.85rem", color: "rgba(255,255,255,0.7)", marginBottom: "1.5rem", textAlign: "center", lineHeight: 1.5 }}>
+              We sent a recovery code to <br/><strong style={{ color: "#4ecdc4" }}>{resetEmail}</strong>
+            </p>
+            <input className="auth-input" type="text" placeholder="6-digit code" maxLength={6} value={resetOtpCode} onChange={e => setResetOtpCode(e.target.value.replace(/\D/g, ''))} style={{ textAlign: "center", fontSize: "1.5rem", letterSpacing: "0.5em", fontWeight: 700, marginBottom: "0.5rem" }} required />
+            <input className="auth-input" type="password" placeholder="New Password" value={newPassword} onChange={e => setNewPassword(e.target.value)} required />
+            <button type="submit" className="auth-btn" disabled={loading}>{loading ? "Resetting…" : "Reset Password"}</button>
+            <div style={{ textAlign: "center", marginTop: "1.5rem", display: "flex", flexDirection: "column", gap: "1rem" }}>
+              <button type="button" className="auth-link" style={{ background: "none", border: "none", cursor: "pointer", alignSelf: "center", fontSize: "0.8rem" }} onClick={() => setTab("forgot")}>← Back</button>
             </div>
           </form>
         )}
