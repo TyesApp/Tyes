@@ -27,7 +27,7 @@ export interface SmartBillInvoiceRequest {
   companyVatCode: string;
   client: SmartBillClient;
   issueDate: string;
-  seriesName: string;
+  seriesName?: string;
   isDraft: boolean;
   dueDate: string;
   deliveryDate: string;
@@ -45,7 +45,7 @@ export const generateSmartBillInvoice = async (invoiceData: SmartBillInvoiceRequ
     console.warn("SmartBill credentials not found. Returning mock invoice.");
     // Return mock data so the app can continue working without real credentials
     return {
-      series: invoiceData.seriesName || 'TYS',
+      series: invoiceData.seriesName || process.env.SMARTBILL_SERIES_NAME || '',
       number: `MOCK-${Math.floor(Math.random() * 10000)}`,
       url: 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf' // Placeholder PDF
     };
@@ -66,7 +66,10 @@ export const generateSmartBillInvoice = async (invoiceData: SmartBillInvoiceRequ
         'Authorization': authHeader,
         'Accept': 'application/json'
       },
-      body: JSON.stringify(invoiceData)
+      body: JSON.stringify(invoiceData, (key, value) => {
+        if (key === 'seriesName' && !value) return undefined;
+        return value;
+      })
     });
 
     if (!response.ok) {

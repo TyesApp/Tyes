@@ -46,7 +46,7 @@ export async function POST(req: Request) {
           email: clientEmail
         },
         issueDate: new Date().toISOString().split('T')[0],
-        seriesName: 'TYS', // Replace with your SmartBill series
+        seriesName: process.env.SMARTBILL_SERIES_NAME || undefined,
         isDraft: false,
         dueDate: new Date().toISOString().split('T')[0], // Same day
         deliveryDate: new Date().toISOString().split('T')[0],
@@ -54,9 +54,9 @@ export async function POST(req: Request) {
           {
             name: `Pachet Servicii: ${order.plan}`,
             code: 'SRV-01',
-            isTaxIncluded: true,
-            taxName: 'Normala',
-            taxPercentage: 19,
+            isTaxIncluded: parseInt(process.env.SMARTBILL_TAX_PERCENTAGE || '19', 10) > 0,
+            taxName: process.env.SMARTBILL_TAX_NAME !== undefined ? process.env.SMARTBILL_TAX_NAME : 'Normala',
+            taxPercentage: parseInt(process.env.SMARTBILL_TAX_PERCENTAGE || '19', 10),
             measuringUnitName: 'buc',
             currency: 'USD',
             quantity: 1,
