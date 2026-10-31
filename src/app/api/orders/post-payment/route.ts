@@ -32,14 +32,15 @@ export async function POST(req: Request) {
 
     // 2. Mark order as paid for non-custom free orders
     const isCustom = order.plan?.includes('Custom') || order.is_custom || order.plan?.includes('Deep Dive');
+
+    // Paid orders can only be confirmed by Stripe (webhook / verify-session), never from here
+    if (!isCustom && Number(order.revenue || 0) > 0) {
+      return NextResponse.json({ error: 'Paid orders are confirmed by Stripe after payment' }, { status: 400 });
+    }
     const updatedAttachments = { ...(order.attachments || {}) };
     
     if (!isCustom) {
-      if (order.plan === 'Free Image' && order.revenue === 0) {
-        updatedAttachments.payment_status = 'free';
-      } else {
-        updatedAttachments.payment_status = 'paid';
-      }
+      updatedAttachments.payment_status = 'free';
     }
 
     await supabase

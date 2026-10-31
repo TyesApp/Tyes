@@ -462,7 +462,7 @@ const NewOrderPage = ({ supabase, addToast, clientInfo, pricingPlans, setPage, f
         max_revisions: selectedPlan.max_revisions || 3,
         progress: 0,
         category: parsedBrandData.category,
-        attachments: { photos: photoUrls, has_strategy_addon: addStrategy, brand_info: parsedBrandData, category: parsedBrandData.category },
+        attachments: { photos: photoUrls, has_strategy_addon: addStrategy, brand_info: parsedBrandData, category: parsedBrandData.category, ...(isPaid ? { payment_status: 'unpaid' } : {}) },
         reference_images: refUrls,
         font_label_files: fontUrls,
         items: structuredItems,
@@ -481,7 +481,7 @@ const NewOrderPage = ({ supabase, addToast, clientInfo, pricingPlans, setPage, f
           const { error: stratError } = await supabase.from("brand_strategy_requests").insert([{
             user_id: currentUser.id,
             order_id: newOrder.id,
-            status: "new",
+            status: isPaid ? "pending" : "new",
             brand_data: parsedBrandData,
             source: selectedPlan.name === 'Custom / Enterprise' ? 'custom' : (addStrategy ? `${selectedPlan.name.toLowerCase()}_addon_25` : 'standalone_25'),
             tier: selectedPlan.name,
@@ -1824,6 +1824,12 @@ export default function TyesClient() {
     const sessionId = query.get("session_id");
     const intent = query.get("intent");
 
+    if (query.get("cancel")) {
+      addToast("Payment was not completed. Your order is saved as unpaid — you can pay it anytime from Orders or Invoices.", "warning", 7000);
+      setPage("invoices");
+      if (typeof window !== 'undefined') window.history.replaceState(null, '', window.location.pathname);
+    }
+
     if (intent === "deep-dive") {
       setPage("new-order");
       if (typeof window !== 'undefined') window.history.replaceState(null, '', window.location.pathname);
@@ -2118,8 +2124,8 @@ export default function TyesClient() {
           })()}
           {(() => {
             const totalSpentGross = invoices.length > 0
-              ? invoices.reduce((sum, i) => sum + Number(i.amount_gross || i.amount || 0), 0)
-              : orders.reduce((sum, o) => sum + Number(o.gross_revenue || o.total_amount || (o.revenue + (o.tax_amount || 0))), 0);
+              ? invoices.filter(i => i.status === 'paid').reduce((sum, i) => sum + Number(i.amount_gross || i.amount || 0), 0)
+              : orders.filter(o => (o.payment_status || o.attachments?.payment_status) === 'paid').reduce((sum, o) => sum + Number(o.gross_revenue || o.total_amount || (o.revenue + (o.tax_amount || 0))), 0);
             return (
               <StatCard icon={CreditCard} label="Total Spent" value={`$${totalSpentGross > 0 ? totalSpentGross.toFixed(2) : '0.00'}`} accent="#34d399" onClick={() => setPage("invoices")} />
             );
@@ -2249,7 +2255,7 @@ export default function TyesClient() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           orderId: order.id,
-          planName: `Custom Quote: ${order.title || order.plan}`,
+          planName: (order.plan?.includes('Custom') || order.plan?.includes('Deep Dive')) ? `Custom Quote: ${order.title || order.plan}` : (order.plan || order.title),
           price: order.revenue,
           customerEmail: user?.email || clientInfo?.email || order.customer_email,
           customerName: clientInfo?.name || user?.user_metadata?.first_name || order.customer_name,
@@ -2273,6 +2279,9 @@ export default function TyesClient() {
     const rawPs = o.payment_status || o.attachments?.payment_status;
     if (rawPs === 'paid' || rawPs === 'completed' || rawPs === 'succeeded') return true;
     if (rawPs === 'unpaid' || o.status === 'quote_sent') return false;
+    if (invoices.some(i => i.order_id === o.id && i.status === 'paid')) return true;
+    // An order still 'pending' without a confirmed payment was never paid (e.g. checkout abandoned)
+    if (String(o.status || '').toLowerCase() === 'pending') return false;
     if (!(o.plan?.includes('Custom') || o.plan?.includes('Deep Dive')) && o.revenue > 0) return true;
     return false;
   };
@@ -2377,13 +2386,13 @@ export default function TyesClient() {
                       <div style={{ fontSize: 13, fontWeight: 700, color: "#34d399" }}>Paid: ${o.revenue}</div>
                     ) : o.revenue > 0 ? (
                       <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
-                        <div style={{ fontSize: 12, fontWeight: 700, color: "#fbbf24" }}>Quote: ${o.revenue}</div>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: "#fbbf24" }}>{(o.plan?.includes('Custom') || o.plan?.includes('Deep Dive')) ? 'Quote' : 'Awaiting payment'}: ${o.revenue}</div>
                         {o.status !== 'cancelled' && (
                           <button
                             onClick={(e) => { e.stopPropagation(); handlePayOrderInvoice(o); }}
                             style={{ padding: "4px 10px", borderRadius: 14, background: "linear-gradient(135deg,#34d399,#10b981)", color: "#fff", border: "none", fontSize: 11, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}
                           >
-                            <CreditCard size={12} /> Pay Invoice (${o.revenue})
+                            <CreditCard size={12} /> Pay Now (${o.revenue} + VAT)
                           </button>
                         )}
                       </div>
@@ -2749,9 +2758,9 @@ export default function TyesClient() {
         status: i.status,
         date: i.date || '',
         due: i.due || 'Paid',
-        url: i.invoice_url
+        url: i.url
       })),
-      ...orders.filter(o => o.revenue > 0 && !invoices.some(i => i.order === o.title || i.rawOrder?.id === o.id)).map((o, idx) => {
+      ...orders.filter(o => o.revenue > 0 && !invoices.some(i => i.order_id === o.id)).map((o, idx) => {
         const paid = isOrderPaid(o);
         return {
           displayId: `INV-${String(invoices.length + idx + 1).padStart(4, '0')}`,
@@ -2761,7 +2770,7 @@ export default function TyesClient() {
           amount: o.revenue,
           status: paid ? 'paid' : (o.status === 'cancelled' ? 'cancelled' : 'pending'),
           date: o.date,
-          due: 'Upon Receipt',
+          due: paid ? 'Processing' : 'Upon Receipt',
           url: null,
           rawOrder: o
         };
@@ -2837,196 +2846,21 @@ export default function TyesClient() {
                         onClick={() => handlePayOrderInvoice(inv.rawOrder || { id: inv.orderId || inv.id, title: inv.order, revenue: inv.amount })}
                         style={{ padding: "5px 12px", borderRadius: 7, border: "none", background: "linear-gradient(135deg,#34d399,#10b981)", color: "#fff", fontSize: 11, fontWeight: 700, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4 }}
                       >
-                        <CreditCard size={11} /> Pay Now (${inv.amount})
+                        <CreditCard size={11} /> Pay Now (${inv.amount} + VAT)
                       </button>
                     )}
-                    <a
-                      href={inv.url && (inv.url.startsWith('http://') || inv.url.startsWith('https://')) ? inv.url : "#"}
-                      target={inv.url && (inv.url.startsWith('http://') || inv.url.startsWith('https://')) ? "_blank" : "_self"}
-                      rel="noopener noreferrer"
-                      onClick={(e) => {
-                        const hasRealUrl = inv.url && (inv.url.startsWith('http://') || inv.url.startsWith('https://'));
-                        if (!hasRealUrl) {
-                          e.preventDefault();
-                          const win = window.open("", "_blank");
-
-                          // Determine correct VAT based on client country
-                          const EU_RATES = { AT: 20, BE: 21, BG: 20, HR: 25, CY: 19, CZ: 21, DK: 25, EE: 22, FI: 25.5, FR: 20, DE: 19, GR: 24, HU: 27, IE: 23, IT: 22, LV: 21, LT: 21, LU: 17, MT: 18, NL: 21, PL: 23, PT: 23, RO: 21, SK: 20, SI: 22, ES: 21, SE: 25 };
-                          const NON_EU_RATES = { GB: 20, NO: 25, CH: 8.1, IS: 24, BD: 9, US: 0, CA: 5, AU: 10 };
-                          const clientCountry = (clientInfo?.country || 'RO').toUpperCase();
-                          const isEU = Object.keys(EU_RATES).includes(clientCountry);
-                          const isRO = clientCountry === 'RO';
-                          const hasValidVat = clientInfo?.is_business && clientInfo?.vat_number && clientInfo.vat_number.trim().length > 4;
-
-                          let vatRate = 0;
-                          let taxLabel = 'VAT';
-                          let isReverseCharge = false;
-
-                          if (isRO) {
-                            vatRate = 21; taxLabel = 'VAT (RO)';
-                          } else if (isEU && hasValidVat) {
-                            vatRate = 0; isReverseCharge = true;
-                          } else if (isEU) {
-                            vatRate = EU_RATES[clientCountry] || 21; taxLabel = 'VAT';
-                          } else {
-                            const nonEu = NON_EU_RATES[clientCountry];
-                            vatRate = nonEu !== undefined ? nonEu : 0;
-                            taxLabel = clientCountry === 'GB' ? 'UK VAT' : clientCountry === 'CA' ? 'GST' : clientCountry === 'AU' ? 'GST' : clientCountry === 'NO' ? 'MVA' : clientCountry === 'CH' ? 'MWST' : 'VAT';
-                          }
-
-                          // Calculate amounts (price is net, tax exclusive)
-                          const netAmt = Number(inv.amount || 0).toFixed(2);
-                          const vatAmt = (Number(netAmt) * vatRate / 100).toFixed(2);
-                          const grandTotal = (Number(netAmt) + Number(vatAmt)).toFixed(2);
-
-                          // Client display info
-                          const clientName = (clientInfo?.is_business && clientInfo?.company_name)
-                            ? clientInfo.company_name
-                            : (clientInfo?.name || 'Client');
-                          const clientEmail = clientInfo?.email || '';
-                          const clientAddress = clientInfo?.registered_address || '';
-                          const clientVat = clientInfo?.vat_number || '';
-                          const invoiceDate = inv.date || new Date().toISOString().split('T')[0];
-
-                          // Tax notice
-                          const taxNoticeHtml = isReverseCharge
-                            ? `<strong>Tax &amp; Compliance Information:</strong><br/>
-                               &bull; Supplier EU OSS: <strong>EU372101016</strong><br/>
-                               &bull; Reverse Charge — 0% VAT (Art. 196 Directive 2006/112/EC)<br/>
-                               &bull; Your VAT Number: <strong>${clientVat}</strong><br/>
-                               &bull; <em>VAT to be accounted for by the recipient.</em>`
-                            : vatRate > 0
-                              ? `<strong>Tax &amp; Compliance Information:</strong><br/>
-                                 &bull; Supplier EU OSS: <strong>EU372101016</strong><br/>
-                                 &bull; Tax: <strong>${taxLabel} ${vatRate}% — Standard Rate</strong><br/>
-                                 &bull; Client Country: <strong>${clientCountry}</strong>`
-                              : `<strong>Tax &amp; Compliance Information:</strong><br/>
-                                 &bull; Supplier: <strong>TYES LLC</strong><br/>
-                                 &bull; Tax: <strong>0% — Outside taxable jurisdiction</strong><br/>
-                                 &bull; Client Country: <strong>${clientCountry}</strong>`;
-
-                          win.document.write(`<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8"/>
-<title>Invoice ${inv.displayId} — tyes.app</title>
-<style>
-*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'Segoe UI',Tahoma,sans-serif;background:#f8fafc;color:#0f172a;padding:40px 20px}
-.page{max-width:720px;margin:0 auto;background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:44px 48px;box-shadow:0 4px 24px rgba(0,0,0,0.07)}
-.header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #14b8a6;padding-bottom:24px;margin-bottom:32px}
-.brand{font-size:34px;font-weight:900;color:#0f766e;letter-spacing:-1.5px}
-.brand-sub{font-size:11px;color:#64748b;margin-top:4px;line-height:1.6}
-.inv-label{font-size:10px;font-weight:700;color:#14b8a6;text-transform:uppercase;letter-spacing:0.08em;text-align:right}
-.inv-number{font-size:22px;font-weight:800;color:#0f172a;text-align:right;margin-top:4px}
-.parties{display:grid;grid-template-columns:1fr 1fr;gap:32px;margin-bottom:28px}
-.party-label{font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:8px}
-.party-name{font-size:15px;font-weight:700;color:#0f172a;margin-bottom:4px}
-.party-info{font-size:12px;color:#475569;line-height:1.8}
-.vat-badge{display:inline-block;margin-top:6px;padding:2px 8px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:4px;font-size:11px;font-weight:600;color:#15803d}
-.meta{display:flex;justify-content:space-between;background:#f8fafc;border-radius:8px;padding:12px 16px;margin-bottom:28px;font-size:12px;color:#475569;gap:16px;flex-wrap:wrap}
-.meta strong{color:#0f172a}
-.status-paid{padding:3px 10px;background:#dcfce7;color:#15803d;border-radius:20px;font-size:11px;font-weight:700}
-table{width:100%;border-collapse:collapse;margin-bottom:8px}
-thead th{background:#f1f5f9;color:#475569;font-size:10px;text-transform:uppercase;letter-spacing:0.06em;padding:10px 14px;text-align:left}
-tbody td{padding:14px;border-bottom:1px solid #f1f5f9;font-size:13px;color:#1e293b}
-.ar{text-align:right;font-weight:700}
-.totals-row{display:flex;justify-content:space-between;padding:7px 14px;font-size:13px;color:#475569}
-.totals-row.vat-row{color:#b45309}
-.totals-row.grand{border-top:2px solid #0f766e;padding-top:14px;margin-top:6px;font-size:17px;font-weight:800;color:#0f766e}
-.tax-box{background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:16px 18px;margin-top:24px;font-size:11.5px;color:#334155;line-height:1.9}
-.footer{margin-top:32px;text-align:center;font-size:11px;color:#94a3b8;border-top:1px solid #f1f5f9;padding-top:20px}
-.btn-print{display:block;width:fit-content;margin:24px auto 0;padding:10px 28px;background:#0d9488;color:#fff;border:none;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer}
-@media print{.btn-print{display:none!important}body{background:#fff;padding:0}.page{border:none;box-shadow:none;padding:24px;border-radius:0}}
-</style>
-</head>
-<body>
-<div class="page">
-  <div class="header">
-    <div>
-      <div class="brand">tyes</div>
-      <div class="brand-sub">tyes.app &middot; Campaign Visuals &amp; Strategy<br/>TYES LLC &middot; EU OSS: EU372101016</div>
-    </div>
-    <div>
-      <div class="inv-label">Official Tax Invoice</div>
-      <div class="inv-number">${inv.displayId}</div>
-    </div>
-  </div>
-
-  <div class="parties">
-    <div>
-      <div class="party-label">Billed To</div>
-      <div class="party-name">${clientName}</div>
-      <div class="party-info">
-        ${clientEmail}<br/>
-        ${clientAddress ? clientAddress + '<br/>' : ''}
-        ${clientCountry}
-        ${clientVat ? '<div class="vat-badge">VAT: ' + clientVat + '</div>' : ''}
-      </div>
-    </div>
-    <div style="text-align:right">
-      <div class="party-label">Issued By</div>
-      <div class="party-name">TYES LLC</div>
-      <div class="party-info">billing@tyes.app<br/>tyes.app<br/>EU OSS: EU372101016</div>
-    </div>
-  </div>
-
-  <div class="meta">
-    <div><strong>Invoice Date:</strong> ${invoiceDate}</div>
-    <div><strong>Due:</strong> ${inv.due || 'Paid'}</div>
-    <div><strong>Status:</strong> <span class="status-paid">${(inv.status || 'PAID').toUpperCase()}</span></div>
-    ${inv.stripeId ? '<div><strong>Ref:</strong> ' + inv.stripeId + '</div>' : ''}
-  </div>
-
-  <table>
-    <thead><tr><th>Description</th><th>Service Type</th><th style="text-align:right">Net Amount (USD)</th></tr></thead>
-    <tbody>
-      <tr>
-        <td>${inv.order || 'Campaign Service'}</td>
-        <td>Campaign Visuals / Strategy</td>
-        <td class="ar">$${netAmt}</td>
-      </tr>
-    </tbody>
-  </table>
-
-  <div>
-    <div class="totals-row"><span>Subtotal (Net)</span><span>$${netAmt}</span></div>
-    <div class="totals-row vat-row">
-      <span>${isReverseCharge ? 'VAT — Reverse Charge (0%)' : vatRate > 0 ? taxLabel + ' (' + vatRate + '%)' : 'Tax (0%)'}</span>
-      <span>$${vatAmt}</span>
-    </div>
-    <div class="totals-row grand"><span>Total ${inv.status === 'paid' ? 'Paid' : 'Due'}</span><span>$${grandTotal}</span></div>
-  </div>
-
-  <div class="tax-box">${taxNoticeHtml}</div>
-
-  <div style="text-align:center"><button class="btn-print" onclick="window.print()">🖨️ Print / Save as PDF</button></div>
-  <div class="footer">Thank you for choosing tyes.app &middot; Official Tax Invoice &middot; ${inv.displayId}</div>
-</div>
-</body>
-</html>`);
-                          win.document.close();
-                        }
-                      }}
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: 5,
-                        padding: "5px 12px",
-                        borderRadius: 7,
-                        border: "1px solid rgba(78,205,196,0.35)",
-                        background: "rgba(78,205,196,0.08)",
-                        color: "#4ecdc4",
-                        fontSize: 11,
-                        fontWeight: 600,
-                        textDecoration: "none",
-                        cursor: "pointer",
-                        transition: "all 0.2s",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      <Download size={11} /> {inv.url && (inv.url.startsWith('http://') || inv.url.startsWith('https://')) ? "Stripe PDF ↗" : "Download PDF"}
-                    </a>
+                    {inv.url && (inv.url.startsWith('http://') || inv.url.startsWith('https://')) ? (
+                      <a
+                        href={inv.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "5px 12px", borderRadius: 7, border: "1px solid rgba(78,205,196,0.35)", background: "rgba(78,205,196,0.08)", color: "#4ecdc4", fontSize: 11, fontWeight: 600, textDecoration: "none", cursor: "pointer", whiteSpace: "nowrap" }}
+                      >
+                        <Download size={11} /> Invoice PDF ↗
+                      </a>
+                    ) : inv.status === 'paid' ? (
+                      <span style={{ fontSize: 11, color: "#6b7280", whiteSpace: "nowrap" }}>Invoice being issued…</span>
+                    ) : null}
                   </td>
                 </tr>
               )) : (

@@ -114,6 +114,9 @@ const getPaymentStatus = (o) => {
   const rev = Number(o.revenue || 0);
   if (rev <= 0) return 'free';
 
+  // Still pending with no confirmed Stripe payment => checkout was abandoned
+  if (String(o.status || '').toLowerCase() === 'pending') return 'unpaid';
+
   // Regular paid plans (Single, Starter, Pro, Campaign 5, Campaign 10, etc.) are paid at checkout
   return 'paid';
 };

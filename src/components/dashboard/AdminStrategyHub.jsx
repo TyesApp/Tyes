@@ -11,6 +11,7 @@ const getPaymentStatus = (item) => {
   const isCustom = o.plan?.includes('Custom') || item.plan?.includes('Custom') || o.is_custom || item.is_custom;
   if (isCustom) return 'unpaid';
   const rev = Number(o.revenue || item.revenue || item.amount || 0);
+  if (rev > 0 && String(o.status || '').toLowerCase() === 'pending') return 'unpaid';
   if (rev > 0) return 'paid';
   const src = item.source || o.source;
   if (src === 'standalone_25' || src === 'Standalone Request' || src === 'Order Add-on' || (typeof src === 'string' && src.includes('addon_25'))) return 'paid';

@@ -65,7 +65,7 @@ export default function BrandStrategyHub({ supabase, clientInfo, setPage }) {
         revenue: 25,
         revisions: 0,
         max_revisions: 0,
-        attachments: { photos: [], has_strategy_addon: false },
+        attachments: { photos: [], has_strategy_addon: false, payment_status: 'unpaid' },
         progress: 0,
         created_at: new Date().toISOString()
       }]).select().single();
@@ -76,7 +76,7 @@ export default function BrandStrategyHub({ supabase, clientInfo, setPage }) {
       await supabase.from("brand_strategy_requests").insert([{
         user_id: clientInfo.id,
         order_id: newOrder.id,
-        status: "new",
+        status: "pending",
         brand_data: formData,
         source: 'Standalone Request',
         tier: 'Brand Strategy',
