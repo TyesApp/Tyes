@@ -58,25 +58,37 @@ export async function POST(req: Request) {
       // First, get the current order to access attachments
       const { data: currentOrder } = await supabase
         .from('orders')
-        .select('attachments')
+        .select('attachments, status')
         .eq('id', orderId)
         .single();
 
-      const updatedAttachments = { ...(currentOrder?.attachments || {}) };
+      if (!currentOrder) {
+        console.error('Webhook: order not found', orderId);
+        return NextResponse.json({ received: true, ignored: 'order_not_found' });
+      }
+
+      const updatedAttachments = { ...(currentOrder.attachments || {}) };
       updatedAttachments.payment_status = 'paid';
 
-      // Update the status of the order to 'paid' and update attachments
-      const { data: order, error } = await supabase
+      // Idempotent transition: only the FIRST confirmation (webhook or
+      // verify-session) flips the order and runs the side effects below.
+      // Stripe retries and the client-side race are no-ops.
+      const { data: wonRows, error } = await supabase
         .from('orders')
         .update({ status: 'paid', attachments: updatedAttachments })
         .eq('id', orderId)
-        .select()
-        .single();
-        
-      if (error || !order) {
+        .in('status', ['pending', 'in_progress', 'quote_sent'])
+        .select();
+
+      if (error) {
          console.error('Error updating supabase order:', error);
          return NextResponse.json({ error: 'Database update failed' }, { status: 500 });
       }
+      if (!wonRows || wonRows.length === 0) {
+        // Already processed (or being processed) elsewhere.
+        return NextResponse.json({ received: true, alreadyProcessed: true });
+      }
+      const order = wonRows[0];
 
       // Handle brand_strategy_requests for this order
       const { data: existingRequest } = await supabase
@@ -103,7 +115,7 @@ export async function POST(req: Request) {
              order_id: orderId,
              status: 'new',
              brand_data: { brandName: order.customer_name || 'Unknown', category: 'N/A' },
-             source: plan === 'Brand Strategy' ? 'Standalone Request' : 'Order Add-on',
+             source: plan === 'Brand Strategy' ? 'Standalone Request' : (hasStrategyAddon ? 'Order Add-on' : 'included'),
              tier: plan,
              assigned_to: 'Raluca',
              created_at: new Date().toISOString()
@@ -111,8 +123,17 @@ export async function POST(req: Request) {
         }
       }
 
-      // Save the invoice to the invoices table
+      // Save the invoice to the invoices table (skip if already recorded)
       if (invoiceUrl && invoiceId) {
+        const { data: existingInv } = await supabase
+          .from('invoices')
+          .select('id')
+          .eq('stripe_invoice_id', invoiceId)
+          .limit(1)
+          .maybeSingle();
+        if (existingInv) {
+          return NextResponse.json({ received: true });
+        }
         const { error: invError } = await supabase.from('invoices').insert([{
           order_id: order.id,
           user_id: order.user_id,

@@ -304,10 +304,11 @@ export default function AdminStrategyHub({ supabase, addToast }) {
   const paidCount = requests.filter(r => getPaymentStatus(r) === 'paid').length;
   const computedConversion = totalCount > 0 ? Math.round((paidCount / totalCount) * 100) : 0;
   const computedRevenue = requests.reduce((acc, r) => {
-    if (getPaymentStatus(r) === 'paid') {
-      // Strategy standalone or add-on fee is strictly $25 per strategy request
-      return acc + 25;
-    }
+    // Only strategies paid separately ($25 standalone or add-on) count as
+    // strategy revenue; ones bundled with Campaign/Custom plans do not.
+    const src = String(r.source || '');
+    const paidSeparately = src.includes('standalone') || src.includes('addon') || src === 'Standalone Request' || src === 'Order Add-on';
+    if (paidSeparately && getPaymentStatus(r) === 'paid') return acc + 25;
     return acc;
   }, 0);
 

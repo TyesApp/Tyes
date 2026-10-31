@@ -70,14 +70,20 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: true, alreadyProcessed: true, invoiceUrl });
     }
 
-    // 5. Mark order as paid
+    // 5. Mark order as paid — but only if nothing else already did (idempotent,
+    // race-safe against the Stripe webhook).
     const updatedAttachments = { ...(existingOrder.attachments || {}) };
     updatedAttachments.payment_status = 'paid';
 
-    await supabase
+    const { data: wonRows } = await supabase
       .from('orders')
       .update({ status: 'paid', attachments: updatedAttachments })
-      .eq('id', orderId);
+      .eq('id', orderId)
+      .in('status', ['pending', 'in_progress', 'quote_sent'])
+      .select();
+    if (!wonRows || wonRows.length === 0) {
+      return NextResponse.json({ success: true, alreadyProcessed: true, invoiceUrl });
+    }
 
     // Handle brand_strategy_requests for this order
     const { data: existingRequest } = await supabase
@@ -104,7 +110,7 @@ export async function POST(req: Request) {
            order_id: orderId,
            status: 'new',
            brand_data: { brandName: existingOrder.customer_name || 'Unknown', category: 'N/A' },
-           source: plan === 'Brand Strategy' ? 'Standalone Request' : 'Order Add-on',
+           source: plan === 'Brand Strategy' ? 'Standalone Request' : (hasStrategyAddon ? 'Order Add-on' : 'included'),
            tier: plan,
            assigned_to: 'Raluca',
            created_at: new Date().toISOString()
@@ -112,8 +118,17 @@ export async function POST(req: Request) {
       }
     }
 
-    // 6. Save invoice record
+    // 6. Save invoice record (skip if already recorded)
     if (invoiceUrl && invoiceId) {
+      const { data: existingInv } = await supabase
+        .from('invoices')
+        .select('id')
+        .eq('stripe_invoice_id', invoiceId)
+        .limit(1)
+        .maybeSingle();
+      if (existingInv) {
+        return NextResponse.json({ success: true, invoiceUrl });
+      }
       await supabase.from('invoices').insert([{
         order_id: orderId,
         user_id: existingOrder.user_id,

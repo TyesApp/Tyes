@@ -24,6 +24,7 @@ export async function GET(req: NextRequest) {
     .from('invoices')
     .select('user_id')
     .eq('stripe_invoice_id', stripeInvoiceId)
+    .limit(1)
     .maybeSingle();
   if (!row) return new NextResponse('Invoice not found', { status: 404 });
 

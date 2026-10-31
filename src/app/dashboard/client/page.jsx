@@ -483,7 +483,7 @@ const NewOrderPage = ({ supabase, addToast, clientInfo, pricingPlans, setPage, f
             order_id: newOrder.id,
             status: isPaid ? "pending" : "new",
             brand_data: parsedBrandData,
-            source: selectedPlan.name === 'Custom / Enterprise' ? 'custom' : (addStrategy ? `${selectedPlan.name.toLowerCase()}_addon_25` : 'standalone_25'),
+            source: selectedPlan.name === 'Custom / Enterprise' ? 'custom' : (addStrategy ? `${selectedPlan.name.toLowerCase()}_addon_25` : (selectedPlan.strategy_included ? 'included' : 'standalone_25')),
             tier: selectedPlan.name,
             assigned_to: 'Raluca',
             created_at: new Date().toISOString()

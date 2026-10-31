@@ -166,8 +166,9 @@ const InputField = ({ label, value, onChange, placeholder, type }) => (
 // PAGES
 
 const DashboardPage = ({ toast, goTo, orders, users, strategyRequests }) => {
-  // 1. Core Stats
-  const totalRevenue = orders.reduce((sum, o) => sum + (o.revenue || 0), 0);
+  // 1. Core Stats (revenue counts only confirmed-paid orders)
+  const paidOrders = orders.filter(o => getPaymentStatus(o) === 'paid');
+  const totalRevenue = paidOrders.reduce((sum, o) => sum + (o.revenue || 0), 0);
   const totalImages = orders.reduce((sum, o) => {
     const status = (o.status || '').toLowerCase();
     const count = Number(o.images || o.images_count || 0);
@@ -188,7 +189,7 @@ const DashboardPage = ({ toast, goTo, orders, users, strategyRequests }) => {
     const d = new Date(o.created_at);
     const m = d.toLocaleString('default', { month: 'short' });
     if (!acc[m]) acc[m] = { month: m, revenue: 0, orders: 0, sortKey: d.getMonth() };
-    acc[m].revenue += (o.revenue || 0);
+    if (getPaymentStatus(o) === 'paid') acc[m].revenue += (o.revenue || 0);
     acc[m].orders += 1;
     return acc;
   }, {});
@@ -365,7 +366,9 @@ const OrdersPage = ({ orders, setOrders, toast, goTo, supabase, targetOrder, set
     try {
       const numericPrice = parseFloat(newPrice) || 0;
       const targetOrderObj = orders.find(o => o.id === orderId) || viewOrder;
-      const newPayStatus = numericPrice > 0 ? 'unpaid' : 'free';
+      const currentPs = targetOrderObj?.payment_status || targetOrderObj?.attachments?.payment_status;
+      const wasPaid = ['paid', 'completed', 'succeeded'].includes(currentPs) || ['paid', 'completed', 'delivered'].includes(targetOrderObj?.status);
+      const newPayStatus = wasPaid ? (currentPs || 'paid') : (numericPrice > 0 ? 'unpaid' : 'free');
       const newStatus = targetOrderObj?.status;
       const updatedAttachments = { ...(targetOrderObj?.attachments || {}), payment_status: newPayStatus };
 
@@ -521,7 +524,9 @@ const OrdersPage = ({ orders, setOrders, toast, goTo, supabase, targetOrder, set
 
       const newItems = [...(order.items || [])];
       const currentItem = newItems[itemIndex];
-      const isRevision = currentItem.status === "Revision requested";
+      // The client marks items with status "revision"; a re-upload on an item
+      // that already has a finished image is also a revision redelivery.
+      const isRevision = currentItem.status === "revision" || Boolean(currentItem.v2Image) || (Boolean(currentItem.finishImage) && Boolean(currentItem.revisionReason));
 
       newItems[itemIndex] = {
         ...currentItem,
@@ -1463,7 +1468,7 @@ const AnalyticsPage = ({ users, orders }) => {
     const d = new Date(o.created_at);
     const m = d.toLocaleString('default', { month: 'short' });
     if (!acc[m]) acc[m] = { month: m, revenue: 0, orders: 0, sortKey: d.getMonth() };
-    acc[m].revenue += (o.revenue || 0);
+    if (getPaymentStatus(o) === 'paid') acc[m].revenue += (o.revenue || 0);
     acc[m].orders += 1;
     return acc;
   }, {});
@@ -1491,8 +1496,9 @@ const AnalyticsPage = ({ users, orders }) => {
   const clientsWithMultipleOrders = clientAccounts.filter(u => (u.orders && u.orders > 1) || (u.spent && u.spent > 100)).length;
   const clientRetention = clientAccounts.length ? (clientsWithMultipleOrders / clientAccounts.length) * 100 : 0;
 
-  const totalRevenue = orders.reduce((acc, o) => acc + (o.revenue || 0), 0);
-  const avgOrderValue = orders.length ? totalRevenue / orders.length : 0;
+  const paidOrdersA = orders.filter(o => getPaymentStatus(o) === 'paid');
+  const totalRevenue = paidOrdersA.reduce((acc, o) => acc + (o.revenue || 0), 0);
+  const avgOrderValue = paidOrdersA.length ? totalRevenue / paidOrdersA.length : 0;
 
   const pendingOrders = orders.filter(o => o.status === 'pending' || o.status === 'in_progress' || o.status === 'revision').length;
   const capacityUsed = Math.min(100, (pendingOrders / 20) * 100);
@@ -2037,7 +2043,7 @@ export default function TyesAdmin() {
               (o.user_id && o.user_id === u.id) ||
               (o.customer_email && u.email && o.customer_email.toLowerCase().trim() === u.email.toLowerCase().trim())
             );
-            const totalSpent = clientOrders.reduce((sum, o) => sum + Number(o.revenue || 0), 0);
+            const totalSpent = clientOrders.filter(o => getPaymentStatus(o) === 'paid').reduce((sum, o) => sum + Number(o.revenue || 0), 0);
 
             return {
               ...u,
