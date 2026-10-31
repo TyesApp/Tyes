@@ -2856,9 +2856,17 @@ export default function TyesClient() {
                         rel="noopener noreferrer"
                         style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "5px 12px", borderRadius: 7, border: "1px solid rgba(78,205,196,0.35)", background: "rgba(78,205,196,0.08)", color: "#4ecdc4", fontSize: 11, fontWeight: 600, textDecoration: "none", cursor: "pointer", whiteSpace: "nowrap" }}
                       >
-                        <Download size={11} /> Invoice PDF ↗
+                        View ↗
                       </a>
-                    ) : inv.status === 'paid' ? (
+                    ) : null}
+                    {inv.url && typeof inv.stripeId === 'string' && inv.stripeId.startsWith('in_') ? (
+                      <a
+                        href={`/api/invoices/pdf?invoice=${inv.stripeId}`}
+                        style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "5px 12px", borderRadius: 7, border: "none", background: "#4ecdc4", color: "#050505", fontSize: 11, fontWeight: 700, textDecoration: "none", cursor: "pointer", whiteSpace: "nowrap" }}
+                      >
+                        <Download size={11} /> Download PDF
+                      </a>
+                    ) : inv.url ? null : inv.status === 'paid' ? (
                       <span style={{ fontSize: 11, color: "#6b7280", whiteSpace: "nowrap" }}>Invoice being issued…</span>
                     ) : null}
                   </td>
