@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { createClient as createClientBase } from '@supabase/supabase-js';
+import { isAdminUser } from '@/utils/auth/admin';
 
 export async function GET(
   req: Request,
@@ -32,8 +33,7 @@ export async function GET(
     }
 
     // Security check: must be owner or admin
-    const isAdmin = user.email?.toLowerCase().includes('tyes') || user.email?.toLowerCase().includes('raluca') || user.email === 'tayebur@gmail.com';
-    if (request.user_id !== user.id && !isAdmin) {
+    if (request.user_id !== user.id && !(await isAdminUser(user.id))) {
       return NextResponse.json({ error: 'Access denied: You do not own this strategy deliverable' }, { status: 403 });
     }
 

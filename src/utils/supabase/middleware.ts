@@ -42,8 +42,17 @@ export async function updateSession(request: NextRequest) {
   }
 
   if (user) {
-    const role = user.user_metadata?.role || 'client'
-    const isAdmin = ["admin", "superAdmin"].includes(role)
+    // The role must come from profiles.role (server-controlled). user_metadata can be
+    // edited by the user themselves, so it must never grant admin access.
+    let isAdmin = false
+    {
+      const { data: roleRow } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .maybeSingle()
+      isAdmin = ["admin", "superAdmin", "super_admin"].includes(roleRow?.role)
+    }
     
     // Prevent clients from accessing admin dashboard
     if (!isAdmin && pathname.startsWith('/dashboard/admin')) {
@@ -75,9 +84,7 @@ export async function updateSession(request: NextRequest) {
         .select('*')
         .eq('id', user.id)
         .maybeSingle()
-      const profileIsAdmin = ["admin", "superAdmin"].includes(profile?.role)
-
-      if (!profile?.country && !profileIsAdmin) {
+      if (!profile?.country) {
         const url = request.nextUrl.clone()
         url.pathname = '/auth/complete-profile'
         url.search = ''

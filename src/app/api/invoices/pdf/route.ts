@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
 
   if (row.user_id !== user.id) {
     const { data: profile } = await admin.from('profiles').select('role').eq('id', user.id).maybeSingle();
-    const isAdmin = ['admin', 'superAdmin'].includes(profile?.role || user.user_metadata?.role);
+    const isAdmin = ['admin', 'superAdmin', 'super_admin'].includes(profile?.role);
     if (!isAdmin) return new NextResponse('Forbidden', { status: 403 });
   }
 

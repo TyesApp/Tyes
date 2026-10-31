@@ -39,6 +39,13 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { order_id, brand_data, source, tier } = body;
 
+    if (order_id) {
+      const { data: ownOrder } = await supabase.from('orders').select('id').eq('id', order_id).eq('user_id', user.id).maybeSingle();
+      if (!ownOrder) {
+        return NextResponse.json({ error: 'Order not found' }, { status: 404 });
+      }
+    }
+
     const { data, error } = await supabase
       .from('brand_strategy_requests')
       .insert({

@@ -1,3 +1,4 @@
+import { isAdminUser } from '@/utils/auth/admin';
 import { NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { createClient as createClientBase } from '@supabase/supabase-js';
@@ -23,11 +24,20 @@ export async function POST(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    if (!(await isAdminUser(user.id))) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
     const body = await req.json();
     const pdf_url = body.pdf_url || body.pdfUrl;
 
     if (!pdf_url) {
       return NextResponse.json({ error: 'pdf_url is required' }, { status: 400 });
+    }
+
+    const storagePrefix = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/`;
+    if (typeof pdf_url !== 'string' || !pdf_url.startsWith(storagePrefix)) {
+      return NextResponse.json({ error: 'PDF must be uploaded to Tyes storage' }, { status: 400 });
     }
 
     const { data, error } = await supabaseAdmin

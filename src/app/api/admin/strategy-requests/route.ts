@@ -1,3 +1,4 @@
+import { isAdminUser } from '@/utils/auth/admin';
 import { NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { createClient as createClientBase } from '@supabase/supabase-js';
@@ -9,6 +10,10 @@ export async function GET(req: Request) {
 
     if (userError || !user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    if (!(await isAdminUser(user.id))) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     // Check if admin - we assume there's some admin check, maybe by profile role or email.

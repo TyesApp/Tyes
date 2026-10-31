@@ -18,7 +18,7 @@ export async function GET(request: Request) {
         .eq('id', user.id)
         .maybeSingle()
 
-      const role = profile?.role || user.user_metadata?.role || "client"
+      const role = profile?.role || "client"
       const isAdmin = ["admin", "superAdmin"].includes(role)
       // Country can live on the profile row or in the auth user metadata
       // (complete-profile and email sign-up both write it to user_metadata).

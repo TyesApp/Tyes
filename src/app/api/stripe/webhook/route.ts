@@ -30,7 +30,14 @@ export async function POST(req: Request) {
   if (event.type === 'checkout.session.completed') {
     const session = event.data.object as Stripe.Checkout.Session;
     const orderId = session.metadata?.orderId;
-    
+
+    // Never mark an order paid for less than the server-side price of the session.
+    const expectedNetCents = Number(session.metadata?.expectedNetCents || 0);
+    if (expectedNetCents > 0 && (session.amount_subtotal ?? 0) < expectedNetCents) {
+      console.error(`Underpaid session for order ${orderId}: ${session.amount_subtotal} < ${expectedNetCents}`);
+      return NextResponse.json({ received: true, ignored: 'underpaid' });
+    }
+
     if (orderId) {
       console.log(`Processing successful payment for Order: ${orderId}`);
 

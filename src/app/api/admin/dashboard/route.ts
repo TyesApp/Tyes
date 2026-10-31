@@ -1,8 +1,12 @@
 import { NextResponse } from 'next/server';
 import { createClient as createClientBase } from '@supabase/supabase-js';
+import { getAdminUser } from '@/utils/auth/admin';
 
 export async function GET() {
   try {
+    if (!(await getAdminUser())) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
     const supabaseAdmin = createClientBase(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!

@@ -30,6 +30,12 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'No orderId in session metadata' }, { status: 400 });
     }
 
+    // Never mark an order paid for less than the server-side price of the session.
+    const expectedNetCents = Number(session.metadata?.expectedNetCents || 0);
+    if (expectedNetCents > 0 && (session.amount_subtotal ?? 0) < expectedNetCents) {
+      return NextResponse.json({ error: 'Payment amount mismatch' }, { status: 400 });
+    }
+
     // 2. Check if order is already processed (webhook may have already handled it)
     const { data: existingOrder } = await supabase
       .from('orders')

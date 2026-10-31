@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { createClient } from '@supabase/supabase-js';
+import { createClient as createSessionClient } from '@/utils/supabase/server';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL as string;
@@ -9,15 +10,16 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 
 export async function POST(req: Request) {
   try {
-    const { userId } = await req.json();
-
-    if (!userId) {
-      return NextResponse.json({ error: 'Missing userId' }, { status: 400 });
+    // The portal always belongs to the signed-in user — the body is ignored.
+    const sessionClient = await createSessionClient();
+    const { data: { user: caller } } = await sessionClient.auth.getUser();
+    if (!caller) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+    const userId = caller.id;
 
-    // Fetch the user profile from auth
     const { data: userAuth, error: authError } = await supabase.auth.admin.getUserById(userId);
-    
+
     if (authError || !userAuth?.user) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
@@ -31,7 +33,8 @@ export async function POST(req: Request) {
     if (stripeCustomerId) {
       try {
         const existingCustomer = await stripe.customers.retrieve(stripeCustomerId);
-        if ((existingCustomer as any).deleted) {
+        const custEmail = (existingCustomer as any).email?.toLowerCase?.() || '';
+        if ((existingCustomer as any).deleted || (custEmail && custEmail !== (userAuth.user.email || '').toLowerCase())) {
           stripeCustomerId = null;
         }
       } catch (err) {

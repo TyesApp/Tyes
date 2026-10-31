@@ -89,7 +89,7 @@ function CompleteProfileContent() {
       
       // Determine redirect
       const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
-      const role = profile?.role || user.user_metadata?.role || "client";
+      const role = profile?.role || "client";
       const isAdmin = ["admin", "superAdmin"].includes(role);
       
       window.location.href = isAdmin ? "/dashboard/admin" : "/dashboard/client";

@@ -33,9 +33,18 @@ export async function POST(req: Request) {
     // 2. Mark order as paid for non-custom free orders
     const isCustom = order.plan?.includes('Custom') || order.is_custom || order.plan?.includes('Deep Dive');
 
-    // Paid orders can only be confirmed by Stripe (webhook / verify-session), never from here
-    if (!isCustom && Number(order.revenue || 0) > 0) {
-      return NextResponse.json({ error: 'Paid orders are confirmed by Stripe after payment' }, { status: 400 });
+    // Paid orders can only be confirmed by Stripe (webhook / verify-session), never from here.
+    // The plan's real price comes from pricing_plans, not from the client-written revenue.
+    if (!isCustom) {
+      const { data: plan } = await supabase
+        .from('pricing_plans')
+        .select('price')
+        .eq('name', order.plan)
+        .maybeSingle();
+      const serverPrice = plan ? Number(plan.price) || 0 : Number(order.revenue) || 0;
+      if (serverPrice > 0 || Number(order.revenue || 0) > 0) {
+        return NextResponse.json({ error: 'Paid orders are confirmed by Stripe after payment' }, { status: 400 });
+      }
     }
     const updatedAttachments = { ...(order.attachments || {}) };
     
