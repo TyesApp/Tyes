@@ -32,6 +32,10 @@ export async function PATCH(request: Request) {
     for (const [k, v] of Object.entries(updates || {})) {
       if (ALLOWED_FIELDS.has(k)) safeUpdates[k] = v;
     }
+    if ('revenue' in safeUpdates) {
+      // 2-decimal clamp so the stored value and the signed value never diverge
+      safeUpdates.revenue = Math.round((Number(safeUpdates.revenue) || 0) * 100) / 100;
+    }
 
     // Keep / create the signature that proves a Custom quote price was set by an admin
     if ('revenue' in safeUpdates || 'attachments' in safeUpdates) {

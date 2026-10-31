@@ -65,7 +65,9 @@ export async function POST(
       const emailResult = await sendStrategySnapshotEmail({
         to: clientEmail,
         brandName,
-        pdfUrl: request.delivered_pdf_url
+        // Gated link (owner/admin) that redirects to a short-lived signed URL —
+        // works even when the storage bucket is private.
+        pdfUrl: `${process.env.NEXT_PUBLIC_SITE_URL || 'https://www.tyes.app'}/api/strategy-pdf/${id}`
       });
       if ('error' in emailResult && (emailResult as any).error) {
         console.error('Failed to send email:', (emailResult as any).error);

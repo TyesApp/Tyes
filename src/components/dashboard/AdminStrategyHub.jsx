@@ -11,8 +11,7 @@ const getPaymentStatus = (item) => {
   const isCustom = o.plan?.includes('Custom') || item.plan?.includes('Custom') || o.is_custom || item.is_custom;
   if (isCustom) return 'unpaid';
   const rev = Number(o.revenue || item.revenue || item.amount || 0);
-  if (rev > 0 && String(o.status || '').toLowerCase() === 'pending') return 'unpaid';
-  if (rev > 0) return 'paid';
+  if (rev > 0) return 'unpaid';
   const src = item.source || o.source;
   if (src === 'standalone_25' || src === 'Standalone Request' || src === 'Order Add-on' || (typeof src === 'string' && src.includes('addon_25'))) return 'paid';
   return 'free';
@@ -550,7 +549,7 @@ export default function AdminStrategyHub({ supabase, addToast }) {
                                 </button>
 
                                 {req.delivered_pdf_url && (
-                                  <a href={req.delivered_pdf_url} target="_blank" rel="noopener noreferrer" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', padding: '6px 12px', borderRadius: 999, fontSize: 11, fontWeight: 700, textDecoration: 'none' }}>
+                                  <a href={`/api/strategy-pdf/${req.id}`} target="_blank" rel="noopener noreferrer" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', padding: '6px 12px', borderRadius: 999, fontSize: 11, fontWeight: 700, textDecoration: 'none' }}>
                                     View PDF
                                   </a>
                                 )}

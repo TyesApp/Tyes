@@ -2216,8 +2216,8 @@ export default function TyesClient() {
                     const links = [];
                     orders.forEach(o => {
                       o.items?.forEach(i => {
-                        if ((i.status === "delivered" || i.status === "completed" || o.status === "delivered") && i.finishImage) {
-                          links.push(i.finishImage);
+                        if ((i.status === "delivered" || i.status === "completed" || o.status === "delivered") && (i.v2Image || i.finishImage)) {
+                          links.push(i.v2Image || i.finishImage);
                         }
                       });
                     });
@@ -2280,9 +2280,8 @@ export default function TyesClient() {
     if (rawPs === 'paid' || rawPs === 'completed' || rawPs === 'succeeded') return true;
     if (rawPs === 'unpaid' || o.status === 'quote_sent') return false;
     if (invoices.some(i => i.order_id === o.id && i.status === 'paid')) return true;
-    // An order still 'pending' without a confirmed payment was never paid (e.g. checkout abandoned)
-    if (String(o.status || '').toLowerCase() === 'pending') return false;
-    if (!(o.plan?.includes('Custom') || o.plan?.includes('Deep Dive')) && o.revenue > 0) return true;
+    // No confirmed payment (payment_status / paid invoice) means NOT paid,
+    // whatever the workflow status says.
     return false;
   };
 
@@ -2296,7 +2295,7 @@ export default function TyesClient() {
     const paginatedOrders = filtered.slice((ordersCurrentPage - 1) * itemsPerPage, ordersCurrentPage * itemsPerPage);
 
     const handleDownloadAll = (order) => {
-      const links = (order.items || []).map(i => i.v2Image || i.finishImage).filter(Boolean);
+      const links = (order.items || []).map(i => i.v2Image || i.finishImage).filter(Boolean); // orders page (already correct)
       if (links.length === 0) {
         addToast("No images delivered yet", "info");
         return;
@@ -2754,6 +2753,7 @@ export default function TyesClient() {
         stripeId: i.stripe_invoice_id || i.id,
         id: i.id,
         order: i.order, // correctly formatted in fetchData
+        order_id: i.order_id,
         amount: i.amount,
         status: i.status,
         date: i.date || '',
@@ -2843,7 +2843,7 @@ export default function TyesClient() {
                   <td style={{ padding: "12px 16px", display: "flex", gap: 8, alignItems: "center" }}>
                     {inv.status !== 'paid' && inv.status !== 'cancelled' && (
                       <button
-                        onClick={() => handlePayOrderInvoice(inv.rawOrder || { id: inv.orderId || inv.id, title: inv.order, revenue: inv.amount })}
+                        onClick={() => handlePayOrderInvoice(inv.rawOrder || { id: inv.order_id || inv.orderId, title: inv.order, revenue: inv.amount })}
                         style={{ padding: "5px 12px", borderRadius: 7, border: "none", background: "linear-gradient(135deg,#34d399,#10b981)", color: "#fff", fontSize: 11, fontWeight: 700, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4 }}
                       >
                         <CreditCard size={11} /> Pay Now (${inv.amount} + VAT)

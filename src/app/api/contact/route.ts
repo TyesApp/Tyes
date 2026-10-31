@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { Resend } from 'resend';
 
+const esc = (v: unknown) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string));
+
 export async function POST(req: Request) {
   try {
     const { name, email, subject, message } = await req.json();
@@ -24,13 +26,13 @@ export async function POST(req: Request) {
       from: 'Tyes Contact Form <office@tyes.app>',
       to: 'office@tyes.app',
       replyTo: email,
-      subject: `New Contact Form Submission: ${subject || 'No Subject'}`,
+      subject: `New Contact Form Submission: ${String(subject || 'No Subject').slice(0, 150)}`,
       html: `
-        <h2>New message from ${name}</h2>
-        <p><strong>Email:</strong> ${email}</p>
-        <p><strong>Subject:</strong> ${subject}</p>
+        <h2>New message from ${esc(name)}</h2>
+        <p><strong>Email:</strong> ${esc(email)}</p>
+        <p><strong>Subject:</strong> ${esc(subject)}</p>
         <hr />
-        <p>${message.replace(/\n/g, '<br />')}</p>
+        <p>${esc(message).replace(/\n/g, '<br />')}</p>
       `,
     });
 

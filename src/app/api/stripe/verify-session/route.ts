@@ -5,7 +5,8 @@ import { sendOrderConfirmationEmail } from '@/utils/email';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL as string;
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string;
+// No anon fallback: a missing service key must fail loudly, not silently drop payments.
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY as string;
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 export async function POST(req: Request) {
@@ -65,9 +66,16 @@ export async function POST(req: Request) {
       }
     }
 
-    // 4. If webhook already processed this, just return the invoice URL (for UI use)
-    if (existingOrder.status === 'paid') {
+    // 4. If already processed (webhook or earlier call), just return the invoice URL
+    if (existingOrder.status === 'paid' ||
+        ['paid', 'completed', 'succeeded', 'free'].includes(existingOrder.attachments?.payment_status)) {
       return NextResponse.json({ success: true, alreadyProcessed: true, invoiceUrl });
+    }
+
+    // The paid amount must also cover the order's CURRENT price.
+    const currentNetCents = Math.round(Number(existingOrder.revenue || 0) * 100);
+    if (currentNetCents > 0 && (session.amount_subtotal ?? 0) < currentNetCents) {
+      return NextResponse.json({ error: 'Payment amount mismatch' }, { status: 400 });
     }
 
     // 5. Mark order as paid — but only if nothing else already did (idempotent,
@@ -79,7 +87,7 @@ export async function POST(req: Request) {
       .from('orders')
       .update({ status: 'paid', attachments: updatedAttachments })
       .eq('id', orderId)
-      .in('status', ['pending', 'in_progress', 'quote_sent'])
+      .in('status', ['pending', 'in_progress', 'quote_sent', 'revision', 'delivered', 'new', 'approved'])
       .select();
     if (!wonRows || wonRows.length === 0) {
       return NextResponse.json({ success: true, alreadyProcessed: true, invoiceUrl });

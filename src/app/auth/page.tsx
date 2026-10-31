@@ -87,7 +87,7 @@ function AuthContent() {
           .eq('id', data.user.id)
           .maybeSingle();
         const role = profile?.role || "client";
-        const isAdmin = ['admin', 'superAdmin'].includes(role);
+        const isAdmin = ['admin', 'superAdmin', 'super_admin'].includes(role);
         // Country can live on the profile row or in the auth user metadata
         const hasCountry = Boolean(profile?.country || data.user.user_metadata?.country);
         if (!hasCountry && !isAdmin) {
@@ -189,7 +189,7 @@ function AuthContent() {
         console.log("Verified Role:", role);
 
         addToast("Signed in successfully!", "success");
-        const isAdmin = ["admin", "superAdmin"].includes(role);
+        const isAdmin = ["admin", "superAdmin", "super_admin"].includes(role);
         console.log("Is Admin:", isAdmin);
         window.location.href = isAdmin ? "/dashboard/admin" : "/dashboard/client";
       }
@@ -257,7 +257,7 @@ function AuthContent() {
         } else {
           addToast("Account created successfully!", "success");
           const role = "client";
-          const isAdmin = ["admin", "superAdmin"].includes(role);
+          const isAdmin = ["admin", "superAdmin", "super_admin"].includes(role);
           window.location.href = isAdmin ? "/dashboard/admin" : "/dashboard/client";
         }
       }
@@ -332,7 +332,7 @@ function AuthContent() {
         // Fetch role...
         const { data: profile } = await supabase.from('profiles').select('role').eq('id', data.user.id).single();
         const role = profile?.role || "client";
-        const isAdmin = ["admin", "superAdmin"].includes(role);
+        const isAdmin = ["admin", "superAdmin", "super_admin"].includes(role);
         window.location.href = isAdmin ? "/dashboard/admin" : "/dashboard/client";
       }
     } catch (err: any) {

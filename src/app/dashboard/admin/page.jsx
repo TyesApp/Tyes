@@ -114,11 +114,9 @@ const getPaymentStatus = (o) => {
   const rev = Number(o.revenue || 0);
   if (rev <= 0) return 'free';
 
-  // Still pending with no confirmed Stripe payment => checkout was abandoned
-  if (String(o.status || '').toLowerCase() === 'pending') return 'unpaid';
-
-  // Regular paid plans (Single, Starter, Pro, Campaign 5, Campaign 10, etc.) are paid at checkout
-  return 'paid';
+  // No confirmed payment_status => not paid, whatever the workflow status says
+  // (every Stripe-confirmed payment writes attachments.payment_status = 'paid')
+  return 'unpaid';
 };
 
 // SHARED COMPONENTS
@@ -367,8 +365,8 @@ const OrdersPage = ({ orders, setOrders, toast, goTo, supabase, targetOrder, set
       const numericPrice = parseFloat(newPrice) || 0;
       const targetOrderObj = orders.find(o => o.id === orderId) || viewOrder;
       const currentPs = targetOrderObj?.payment_status || targetOrderObj?.attachments?.payment_status;
-      const wasPaid = ['paid', 'completed', 'succeeded'].includes(currentPs) || ['paid', 'completed', 'delivered'].includes(targetOrderObj?.status);
-      const newPayStatus = wasPaid ? (currentPs || 'paid') : (numericPrice > 0 ? 'unpaid' : 'free');
+      const wasPaid = ['paid', 'completed', 'succeeded', 'free'].includes(currentPs);
+      const newPayStatus = wasPaid ? currentPs : (numericPrice > 0 ? 'unpaid' : 'free');
       const newStatus = targetOrderObj?.status;
       const updatedAttachments = { ...(targetOrderObj?.attachments || {}), payment_status: newPayStatus };
 

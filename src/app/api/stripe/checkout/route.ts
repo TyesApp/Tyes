@@ -38,9 +38,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Order not found' }, { status: 404 });
     }
     const ps = order.attachments?.payment_status;
-    if (['paid', 'completed', 'succeeded', 'free'].includes(ps) ||
-        ['paid', 'completed', 'delivered'].includes(order.status)) {
+    if (['paid', 'completed', 'succeeded', 'free'].includes(ps) || order.status === 'paid') {
       return NextResponse.json({ error: 'Order is already paid' }, { status: 400 });
+    }
+    if (order.status === 'cancelled') {
+      return NextResponse.json({ error: 'This order was cancelled' }, { status: 400 });
     }
 
     // 1b. The amount is decided on the server — never from the request body.

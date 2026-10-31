@@ -5,7 +5,8 @@ import { sendOrderConfirmationEmail } from '@/utils/email';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL as string;
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string;
+// No anon fallback: a missing service key must fail loudly, not silently drop payments.
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY as string;
 
 const supabase = createClient(supabaseUrl, supabaseKey);
 
@@ -58,13 +59,25 @@ export async function POST(req: Request) {
       // First, get the current order to access attachments
       const { data: currentOrder } = await supabase
         .from('orders')
-        .select('attachments, status')
+        .select('attachments, status, revenue')
         .eq('id', orderId)
         .single();
 
       if (!currentOrder) {
         console.error('Webhook: order not found', orderId);
         return NextResponse.json({ received: true, ignored: 'order_not_found' });
+      }
+
+      if (['paid', 'completed', 'succeeded', 'free'].includes(currentOrder.attachments?.payment_status)) {
+        return NextResponse.json({ received: true, alreadyProcessed: true });
+      }
+
+      // The paid amount must also cover the order's CURRENT price (a stale
+      // session may carry an old, lower quote).
+      const currentNetCents = Math.round(Number(currentOrder.revenue || 0) * 100);
+      if (currentNetCents > 0 && (session.amount_subtotal ?? 0) < currentNetCents) {
+        console.error(`Underpaid vs current quote for order ${orderId}: ${session.amount_subtotal} < ${currentNetCents}`);
+        return NextResponse.json({ received: true, ignored: 'underpaid_vs_quote' });
       }
 
       const updatedAttachments = { ...(currentOrder.attachments || {}) };
@@ -77,7 +90,7 @@ export async function POST(req: Request) {
         .from('orders')
         .update({ status: 'paid', attachments: updatedAttachments })
         .eq('id', orderId)
-        .in('status', ['pending', 'in_progress', 'quote_sent'])
+        .in('status', ['pending', 'in_progress', 'quote_sent', 'revision', 'delivered', 'new', 'approved'])
         .select();
 
       if (error) {
@@ -85,6 +98,9 @@ export async function POST(req: Request) {
          return NextResponse.json({ error: 'Database update failed' }, { status: 500 });
       }
       if (!wonRows || wonRows.length === 0) {
+        if (currentOrder.status === 'cancelled') {
+          console.error(`ALERT: payment captured for CANCELLED order ${orderId} (session ${session.id}) — needs manual refund/review`);
+        }
         // Already processed (or being processed) elsewhere.
         return NextResponse.json({ received: true, alreadyProcessed: true });
       }

@@ -4,7 +4,7 @@ import { createClient as createSessionClient } from '@/utils/supabase/server';
 import { sendOrderConfirmationEmail } from '@/utils/email';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL as string;
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string;
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY as string;
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 export async function POST(req: Request) {
@@ -58,13 +58,30 @@ export async function POST(req: Request) {
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle();
-      const serverPrice = plan ? Number(plan.price) || 0 : Number(order.revenue) || 0;
-      if (serverPrice > 0 || Number(order.revenue || 0) > 0) {
+      // Unknown plan names are never trusted as free
+      if (!plan) {
+        return NextResponse.json({ error: 'This order needs a quote from our team' }, { status: 400 });
+      }
+      if ((Number(plan.price) || 0) > 0 || Number(order.revenue || 0) > 0) {
         return NextResponse.json({ error: 'Paid orders are confirmed by Stripe after payment' }, { status: 400 });
       }
+      // One free order per account, enforced server-side
+      if (order.plan === 'Free Image') {
+        const { count } = await supabase
+          .from('orders')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', order.user_id)
+          .eq('plan', 'Free Image');
+        if ((count || 0) > 1) {
+          return NextResponse.json({ error: 'Free Image is limited to one per account' }, { status: 400 });
+        }
+      }
+    } else if (order.attachments?.post_payment_processed) {
+      return NextResponse.json({ error: 'Order already processed' }, { status: 400 });
     }
     const updatedAttachments = { ...(order.attachments || {}) };
-    
+    updatedAttachments.post_payment_processed = true;
+
     if (!isCustom) {
       updatedAttachments.payment_status = 'free';
     }
