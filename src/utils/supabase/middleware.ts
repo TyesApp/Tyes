@@ -44,8 +44,9 @@ export async function updateSession(request: NextRequest) {
   if (user) {
     // The role must come from profiles.role (server-controlled). user_metadata can be
     // edited by the user themselves, so it must never grant admin access.
+    // Only looked up where the role matters, to avoid a DB hit on every request.
     let isAdmin = false
-    {
+    if (pathname.startsWith('/dashboard') || pathname === '/auth') {
       const { data: roleRow } = await supabase
         .from('profiles')
         .select('role')
