@@ -60,7 +60,8 @@ export async function POST(req: Request) {
         .maybeSingle();
       if (plan) {
         price = Number(plan.price) || 0;
-        if (price === 0 && order.attachments?.has_strategy_addon && plan.strategy_addon_allowed) {
+        if (price === 0 && order.attachments?.has_strategy_addon) {
+          // Free Image + Brand Strategy add-on (fixed $25, as in the order flow)
           price += Number(plan.strategy_addon_price) || 25;
         }
       } else {
