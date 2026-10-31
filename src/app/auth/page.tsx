@@ -83,16 +83,18 @@ function AuthContent() {
       if (data.user) {
         const { data: profile } = await supabase
           .from('profiles')
-          .select('role, country')
+          .select('*')
           .eq('id', data.user.id)
-          .single();
-        if (!profile?.country) {
+          .maybeSingle();
+        const role = profile?.role || data.user.user_metadata?.role || 'client';
+        const isAdmin = ['admin', 'superAdmin'].includes(role);
+        // Country can live on the profile row or in the auth user metadata
+        const hasCountry = Boolean(profile?.country || data.user.user_metadata?.country);
+        if (!hasCountry && !isAdmin) {
           // New Google user — collect extra info
           window.location.href = '/auth/complete-profile';
           return;
         }
-        const role = profile?.role || data.user.user_metadata?.role || 'client';
-        const isAdmin = ['admin', 'superAdmin'].includes(role);
         addToast('Signed in successfully!', 'success');
         window.location.href = isAdmin ? '/dashboard/admin' : '/dashboard/client';
       }

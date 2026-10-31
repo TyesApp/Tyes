@@ -14,17 +14,20 @@ export async function GET(request: Request) {
     if (user) {
       const { data: profile } = await supabase
         .from('profiles')
-        .select('country, role')
+        .select('*')
         .eq('id', user.id)
-        .single()
-        
-      if (!profile?.country) {
-        // Missing required profile info (like for Google Auth signups)
-        return NextResponse.redirect(`${requestUrl.origin}/auth/complete-profile`)
-      }
-      
+        .maybeSingle()
+
       const role = profile?.role || user.user_metadata?.role || "client"
       const isAdmin = ["admin", "superAdmin"].includes(role)
+      // Country can live on the profile row or in the auth user metadata
+      // (complete-profile and email sign-up both write it to user_metadata).
+      const hasCountry = Boolean(profile?.country || user.user_metadata?.country)
+
+      if (!hasCountry && !isAdmin) {
+        // Missing required profile info (like for new Google Auth signups)
+        return NextResponse.redirect(`${requestUrl.origin}/auth/complete-profile`)
+      }
       return NextResponse.redirect(`${requestUrl.origin}${isAdmin ? '/dashboard/admin' : '/dashboard/client'}`)
     }
   }
