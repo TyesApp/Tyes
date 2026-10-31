@@ -37,41 +37,55 @@ export async function POST(req: Request) {
     if (order.user_id !== caller.id) {
       return NextResponse.json({ error: 'Order not found' }, { status: 404 });
     }
-    if (order.status === 'paid' || order.attachments?.payment_status === 'paid') {
+    const ps = order.attachments?.payment_status;
+    if (['paid', 'completed', 'succeeded', 'free'].includes(ps) ||
+        ['paid', 'completed', 'delivered'].includes(order.status)) {
       return NextResponse.json({ error: 'Order is already paid' }, { status: 400 });
     }
 
     // 1b. The amount is decided on the server — never from the request body.
+    // An admin-signed quote (attachments.quote_sig over the stored revenue)
+    // always wins: it covers custom quotes and admin price overrides alike.
+    const storedRevenue = Number(order.revenue) || 0;
+    const quoteSig = order.attachments?.quote_sig;
+    const hasSignedQuote = Boolean(quoteSig) && verifyQuote(orderId, storedRevenue, quoteSig);
+    if (quoteSig && !hasSignedQuote) {
+      return NextResponse.json({ error: 'Quote is out of date — please contact support' }, { status: 409 });
+    }
+
     let price: number;
     let planName: string;
     if (isCustomOrder(order)) {
-      // Custom / Deep Dive: the price is the admin-set quote stored on the order.
-      price = Number(order.revenue) || 0;
+      // Custom / Deep Dive: the admin-set quote stored on the order.
+      // (New client-created orders start at revenue 0 — a DB trigger enforces it —
+      // so an unsigned amount here can only predate the signing system.)
+      price = storedRevenue;
       planName = `Custom Quote: ${order.title || order.plan || 'Order'}`;
-      const sig = order.attachments?.quote_sig;
-      if (sig && !verifyQuote(orderId, price, sig)) {
-        return NextResponse.json({ error: 'Quote is out of date — please contact support' }, { status: 409 });
-      }
+    } else if (hasSignedQuote) {
+      price = storedRevenue;
+      planName = order.plan || order.title || 'Tyes order';
     } else {
-      const { data: plan } = await supabase
+      const { data: plan, error: planError } = await supabase
         .from('pricing_plans')
         .select('*')
         .eq('name', order.plan)
+        .eq('active', true)
+        .order('created_at', { ascending: false })
+        .limit(1)
         .maybeSingle();
-      if (plan) {
-        price = Number(plan.price) || 0;
-        if (price === 0 && order.attachments?.has_strategy_addon) {
-          // Free Image + Brand Strategy add-on (fixed $25, as in the order flow)
-          price += Number(plan.strategy_addon_price) || 25;
-        }
-      } else {
-        // Legacy plan no longer in pricing_plans: fall back to the stored amount,
-        // honouring the admin quote signature when present.
-        price = Number(order.revenue) || 0;
-        const sig = order.attachments?.quote_sig;
-        if (sig && !verifyQuote(orderId, price, sig)) {
-          return NextResponse.json({ error: 'Quote is out of date — please contact support' }, { status: 409 });
-        }
+      if (planError) {
+        console.error('Plan lookup failed:', planError);
+        return NextResponse.json({ error: 'Could not price this order — please contact support' }, { status: 500 });
+      }
+      if (!plan) {
+        // Unknown plan and no admin-signed quote: refuse rather than trust stored numbers.
+        return NextResponse.json({ error: 'This order needs a quote from our team before payment' }, { status: 409 });
+      }
+      price = Number(plan.price) || 0;
+      if (order.attachments?.has_strategy_addon) {
+        // Brand Strategy add-on (advertised as +$25 in the order flow)
+        const addon = Number(plan.strategy_addon_price);
+        price += addon > 0 ? addon : 25;
       }
       planName = order.plan || order.title || 'Tyes order';
     }
@@ -113,7 +127,7 @@ export async function POST(req: Request) {
       try {
         const existingCustomer = await stripe.customers.retrieve(stripeCustomerId);
         const custEmail = (existingCustomer as any).email?.toLowerCase?.() || '';
-        if ((existingCustomer as any).deleted || (custEmail && custEmail !== (caller.email || '').toLowerCase())) {
+        if ((existingCustomer as any).deleted || custEmail !== (caller.email || '').toLowerCase()) {
           // Deleted, or the stored ID points at someone else's Stripe customer.
           stripeCustomerId = null;
         } else {

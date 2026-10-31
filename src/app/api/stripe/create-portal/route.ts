@@ -34,7 +34,7 @@ export async function POST(req: Request) {
       try {
         const existingCustomer = await stripe.customers.retrieve(stripeCustomerId);
         const custEmail = (existingCustomer as any).email?.toLowerCase?.() || '';
-        if ((existingCustomer as any).deleted || (custEmail && custEmail !== (userAuth.user.email || '').toLowerCase())) {
+        if ((existingCustomer as any).deleted || custEmail !== (userAuth.user.email || '').toLowerCase()) {
           stripeCustomerId = null;
         }
       } catch (err) {

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { createClient as createSessionClient } from '@/utils/supabase/server';
 import { sendOrderConfirmationEmail } from '@/utils/email';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL as string;
@@ -14,6 +15,12 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'orderId is required' }, { status: 400 });
     }
 
+    const sessionClient = await createSessionClient();
+    const { data: { user: caller } } = await sessionClient.auth.getUser();
+    if (!caller) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     // 1. Fetch the order details
     const { data: order, error: orderError } = await supabase
       .from('orders')
@@ -23,6 +30,10 @@ export async function POST(req: Request) {
 
     if (orderError || !order) {
       console.error('Error fetching order:', orderError);
+      return NextResponse.json({ error: 'Order not found' }, { status: 404 });
+    }
+
+    if (order.user_id !== caller.id) {
       return NextResponse.json({ error: 'Order not found' }, { status: 404 });
     }
 
@@ -36,10 +47,16 @@ export async function POST(req: Request) {
     // Paid orders can only be confirmed by Stripe (webhook / verify-session), never from here.
     // The plan's real price comes from pricing_plans, not from the client-written revenue.
     if (!isCustom) {
+      if (order.attachments?.has_strategy_addon) {
+        return NextResponse.json({ error: 'Paid orders are confirmed by Stripe after payment' }, { status: 400 });
+      }
       const { data: plan } = await supabase
         .from('pricing_plans')
         .select('price')
         .eq('name', order.plan)
+        .eq('active', true)
+        .order('created_at', { ascending: false })
+        .limit(1)
         .maybeSingle();
       const serverPrice = plan ? Number(plan.price) || 0 : Number(order.revenue) || 0;
       if (serverPrice > 0 || Number(order.revenue || 0) > 0) {

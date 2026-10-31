@@ -15,7 +15,7 @@ const ALLOWED_FIELDS = new Set([
   'status', 'revenue', 'attachments', 'items', 'progress', 'revisions', 'max_revisions',
   'title', 'plan', 'images_count', 'category', 'brief_description', 'selected_styles',
   'reference_images', 'font_label_files', 'customer_name', 'customer_email', 'admin_notes', 'notes',
-  'delivered_at', 'completed_at', 'updated_at', 'payment_status', 'is_custom',
+  'documents', 'vat_rate', 'vat_mode', 'vat_country', 'vat_number',
 ]);
 
 export async function PATCH(request: Request) {
