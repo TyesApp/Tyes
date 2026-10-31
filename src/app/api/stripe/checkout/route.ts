@@ -56,9 +56,11 @@ export async function POST(req: Request) {
     let price: number;
     let planName: string;
     if (isCustomOrder(order)) {
-      // Custom / Deep Dive: the admin-set quote stored on the order.
-      // (New client-created orders start at revenue 0 — a DB trigger enforces it —
-      // so an unsigned amount here can only predate the signing system.)
+      // Custom / Deep Dive: payable only once an admin has set (and thereby
+      // signed) the quote. Verified: no legacy unsigned custom quotes exist.
+      if (!hasSignedQuote) {
+        return NextResponse.json({ error: 'This order needs a quote from our team before payment' }, { status: 409 });
+      }
       price = storedRevenue;
       planName = `Custom Quote: ${order.title || order.plan || 'Order'}`;
     } else if (hasSignedQuote) {
