@@ -59,6 +59,34 @@ export async function updateSession(request: NextRequest) {
       return NextResponse.redirect(url)
     }
 
+    // New users (e.g. first Google sign-in) must finish /auth/complete-profile
+    // before reaching the dashboard. The country is stored in user_metadata by
+    // sign-up and by the complete-profile form; the profiles table is checked as
+    // a fallback. Admins are never sent there.
+    const isSwitchingAccount = request.nextUrl.searchParams.has('switch') || request.nextUrl.searchParams.has('logout')
+    const needsProfileCheck =
+      !isAdmin &&
+      !user.user_metadata?.country &&
+      (pathname.startsWith('/dashboard') || (pathname === '/auth' && !isSwitchingAccount))
+
+    if (needsProfileCheck) {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .maybeSingle()
+      const profileIsAdmin = ["admin", "superAdmin"].includes(profile?.role)
+
+      if (!profile?.country && !profileIsAdmin) {
+        const url = request.nextUrl.clone()
+        url.pathname = '/auth/complete-profile'
+        url.search = ''
+        const redirectResponse = NextResponse.redirect(url)
+        supabaseResponse.cookies.getAll().forEach((cookie) => redirectResponse.cookies.set(cookie))
+        return redirectResponse
+      }
+    }
+
     // Redirect from auth page if already logged in (unless explicitly switching accounts or completing profile)
     if (pathname === '/auth') {
       const isSwitching = request.nextUrl.searchParams.has('switch') || request.nextUrl.searchParams.has('logout');
